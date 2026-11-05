@@ -206,7 +206,7 @@ fun HomeScreen(
                             .background(XC.teal),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("悬浮窗已开启 · 可拖动，双击收起", color = XC.textFaint, fontSize = 11.sp)
+                    Text("顶部悬浮岛已开启 · 单击展开、双击迷你、长按隐藏", color = XC.textFaint, fontSize = 11.sp)
                 }
             }
 
@@ -309,7 +309,7 @@ private fun TopBar(onOpenSettings: () -> Unit, onToggleFloat: () -> Unit, floatO
             Spacer(Modifier.width(9.dp))
             Text("小薪薪", color = XC.text, fontSize = 14.5.sp, fontWeight = W500)
             Spacer(Modifier.width(6.dp))
-            Text("v1.9.2", color = XC.textFaint, fontSize = 10.5.sp)
+            Text("v1.9.3", color = XC.textFaint, fontSize = 10.5.sp)
             Spacer(Modifier.weight(1f))
             RoundGlassButton(active = floatOn, onClick = onToggleFloat) {
                 Text("浮", color = if (floatOn) XC.gold else XC.textDim, fontSize = 13.sp, fontWeight = W500)

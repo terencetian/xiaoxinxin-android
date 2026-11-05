@@ -63,11 +63,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        FloatService.setAppForeground(this, true)
         if (pendingFloatEnable && canDrawOverlays()) {
             pendingFloatEnable = false
             EarnRepo.setFloatEnabled(true)
             FloatService.syncVisibility(this, true)
         }
+    }
+
+    override fun onPause() {
+        FloatService.setAppForeground(this, false)
+        super.onPause()
     }
 
     private fun canDrawOverlays(): Boolean =

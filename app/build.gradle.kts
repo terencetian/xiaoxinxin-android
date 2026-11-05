@@ -8,14 +8,15 @@ plugins {
 
 android {
     namespace = "com.haofan.xiaoxinxin"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.haofan.xiaoxinxin"
         minSdk = 26
+        // targetSdk 暂留 35：API 36 强制 edge-to-edge，先把岛跑通再单独做视觉回归
         targetSdk = 35
-        versionCode = 27
-        versionName = "1.9.2"
+        versionCode = 28
+        versionName = "1.9.3"
         resourceConfigurations += listOf("zh", "en")
     }
 

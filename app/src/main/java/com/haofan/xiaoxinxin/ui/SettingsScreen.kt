@@ -18,15 +18,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.haofan.xiaoxinxin.core.EarnRepo
+import com.haofan.xiaoxinxin.core.IslandDoctor
+import com.haofan.xiaoxinxin.core.IslandReport
 import com.haofan.xiaoxinxin.core.dateKey
 import com.haofan.xiaoxinxin.core.fmt
 import com.haofan.xiaoxinxin.core.isValidDayKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 @Composable
@@ -38,6 +44,16 @@ fun SettingsScreen(onBack: () -> Unit) {
     var newEarned by remember { mutableStateOf("") }
     var newOT by remember { mutableStateOf("") }
     var hint by remember { mutableStateOf("") }
+
+    val ctx = LocalContext.current
+    val uiScope = rememberCoroutineScope()
+    var probe by remember { mutableStateOf<IslandReport?>(null) }
+    var probing by remember { mutableStateOf(false) }
+    var probeHint by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { probe = IslandDoctor.probe(ctx, postTest = false) }
+    }
 
     val rows = s.dayLogRows(startKey, endKey)
 
@@ -59,7 +75,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             Spacer(Modifier.width(10.dp))
             Text("设置", color = XC.text, fontSize = 16.sp, fontWeight = W500)
             Spacer(Modifier.weight(1f))
-            Text("v1.9.2", color = XC.textFaint, fontSize = 11.sp)
+            Text("v1.9.3", color = XC.textFaint, fontSize = 11.sp)
         }
 
         Spacer(Modifier.height(18.dp))
@@ -109,11 +125,61 @@ fun SettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
 
         Group("外观与窗口") {
-            ToggleRow("屏幕悬浮窗", "在其它应用上方一直显示今日进账，可拖动，双击收起", s.floatEnabled) {
+            ToggleRow("顶部悬浮岛", "单击展开、双击迷你、长按隐藏；可自由拖动并贴边吸附", s.floatEnabled) {
                 EarnRepo.setFloatEnabled(it)
             }
             Spacer(Modifier.height(10.dp))
             Field("通知栏金额前缀", s.barSymbol, { EarnRepo.setBarSymbol(it) }, "可留空", KeyboardType.Text)
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Group("系统岛能力（实时通知）") {
+            val r = probe
+            if (r == null) {
+                Hint("正在检测…")
+            } else {
+                Text(r.verdict, color = if (r.promoted) XC.teal else XC.orange, fontSize = 12.sp, lineHeight = 17.sp)
+                Spacer(Modifier.height(10.dp))
+                r.rows.forEach { (k, v) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Text(k, color = XC.textFaint, fontSize = 11.sp)
+                        Spacer(Modifier.weight(1f))
+                        Text(v, color = XC.textDim, fontSize = 11.sp, fontFamily = NumFont)
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallChip(if (probing) "检测中…" else "发一条测试岛通知") {
+                        if (probing) return@SmallChip
+                        probing = true
+                        probeHint = ""
+                        uiScope.launch {
+                            val res = withContext(Dispatchers.IO) { IslandDoctor.probe(ctx, postTest = true) }
+                            probe = res
+                            probing = false
+                            probeHint = if (res.promoted)
+                                "去看状态栏顶部 / 锁屏，应该出现胶囊了"
+                            else
+                                "系统没提升。这属于厂商白名单，只能走悬浮岛"
+                        }
+                    }
+                    SmallChip("复制报告") {
+                        val text = r.asText()
+                        runCatching {
+                            val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("小薪薪体检", text))
+                            probeHint = "已复制，可以直接发给我"
+                        }
+                    }
+                }
+                if (probeHint.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Hint(probeHint, XC.teal)
+                }
+                Spacer(Modifier.height(8.dp))
+                Hint("说明：Android 16 起系统支持把常驻通知提升为状态栏胶囊。小米 HyperOS 3 / OPPO ColorOS 16 会直接吃这套标准；vivo 的原子岛要求应用先上架并申请白名单。")
+            }
         }
 
         Spacer(Modifier.height(12.dp))
