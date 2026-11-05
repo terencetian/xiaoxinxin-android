@@ -3,6 +3,7 @@ package com.haofan.xiaoxinxin.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -69,14 +70,14 @@ fun SettingsScreen(onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(32.dp).clip(CircleShape).background(XC.line)
+                Modifier.size(32.dp).clip(CircleShape).background(XC.fill)
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) { Text("‹", color = XC.textDim, fontSize = 20.sp) }
             Spacer(Modifier.width(10.dp))
             Text("设置", color = XC.text, fontSize = 16.sp, fontWeight = W500)
             Spacer(Modifier.weight(1f))
-            Text("v1.9.4", color = XC.textFaint, fontSize = 11.sp)
+            Text("v1.9.5", color = XC.textFaint, fontSize = 11.sp)
         }
 
         Spacer(Modifier.height(18.dp))
@@ -121,6 +122,26 @@ fun SettingsScreen(onBack: () -> Unit) {
             ToggleRow("到点自动下班", "下班时间一到自动停表，加班段落不会被切断", s.autoClockOut) {
                 EarnRepo.setAutoClockOut(it)
             }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Group("外观") {
+            SectionLabel("主题")
+            Spacer(Modifier.height(8.dp))
+            ThemePicker(s.themeMode) { EarnRepo.setThemeMode(it.key) }
+            Spacer(Modifier.height(9.dp))
+            Hint(
+                if (s.themeMode == ThemeMode.SYSTEM.key)
+                    "跟随系统：系统开深色就自动切暗夜，关掉回米白。当前系统是${if (isSystemInDarkTheme()) "深色" else "浅色"}。"
+                else "只改界面配色，悬浮岛保持纯黑药丸，避免在状态栏上变成一块花斑。"
+            )
+            Spacer(Modifier.height(16.dp))
+            SectionLabel("进度条")
+            Spacer(Modifier.height(8.dp))
+            BarPicker(s.barStyle) { EarnRepo.setBarStyle(it.key) }
+            Spacer(Modifier.height(9.dp))
+            Hint("金色是默认；纯色跟随主题主色；彩虹从粉到紫，随进度一点点铺开。")
         }
 
         Spacer(Modifier.height(12.dp))
@@ -254,7 +275,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         Spacer(Modifier.weight(1f))
                         Text(
                             "删除",
-                            color = Color(0xFFE24B4A),
+                            color = XC.danger,
                             fontSize = 11.sp,
                             modifier = Modifier.clickable {
                                 EarnRepo.removeDayLog(key)
@@ -297,11 +318,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("写入流水", color = Color(0xFF1A1200), fontSize = 14.sp, fontWeight = W600)
+                Text("写入流水", color = XC.onGold, fontSize = 14.sp, fontWeight = W600)
             }
             if (hint.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Hint(hint, if (hint.startsWith("已")) XC.teal else Color(0xFFE24B4A))
+                Hint(hint, if (hint.startsWith("已")) XC.teal else XC.danger)
             }
         }
 
@@ -341,7 +362,7 @@ private fun Field(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0x14FFFFFF))
+            .background(XC.fill)
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
         Text(label, color = XC.textFaint, fontSize = 10.sp)
@@ -408,9 +429,9 @@ private fun ToggleRow(
                 .clip(RoundedCornerShape(14.dp))
                 .background(
                     when {
-                        !enabled -> Brush.linearGradient(listOf(Color(0x14FFFFFF), Color(0x0AFFFFFF)))
-                        checked -> Brush.linearGradient(listOf(XC.gold, Color(0xFFFFE08A)))
-                        else -> Brush.linearGradient(listOf(Color(0x33FFFFFF), Color(0x1FFFFFFF)))
+                        !enabled -> Brush.linearGradient(listOf(XC.fill, XC.fill))
+                        checked -> Brush.linearGradient(listOf(XC.gold, XC.goldHi))
+                        else -> Brush.linearGradient(listOf(XC.ghostA, XC.ghostB))
                     }
                 ),
             contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
@@ -422,9 +443,9 @@ private fun ToggleRow(
                     .clip(CircleShape)
                     .background(
                         when {
-                            !enabled -> Color(0x66F4F7FA)
-                            checked -> Color(0xFF241A00)
-                            else -> Color(0xE6F4F7FA)
+                            !enabled -> XC.knobOffDim
+                            checked -> XC.knobOn
+                            else -> XC.knobOff
                         }
                     ),
             )
@@ -437,7 +458,7 @@ private fun MiniStat(label: String, value: String, modifier: Modifier = Modifier
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0x0FFFFFFF))
+            .background(XC.fill)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -452,10 +473,118 @@ private fun SmallChip(text: String, onClick: () -> Unit) {
     Box(
         Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(Color(0x14FFFFFF))
+            .background(XC.fill)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(text, color = XC.textDim, fontSize = 11.sp)
+    }
+}
+
+/** 三选一：米白 / 彩虹 / 跟随系统。 */@Composable
+private fun ThemePicker(current: String, onPick: (ThemeMode) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ThemeMode.entries.forEach { m ->
+            val sel = m.key == current
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (sel) XC.gold.copy(alpha = 0.10f) else XC.fill)
+                    .border(
+                        if (sel) 1.4.dp else 0.8.dp,
+                        if (sel) XC.gold.copy(alpha = 0.8f) else XC.lineStrong,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onPick(m) }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ThemeSwatch(m)
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    m.label,
+                    color = if (sel) XC.gold else XC.textDim,
+                    fontSize = 11.5.sp,
+                    fontWeight = if (sel) W600 else W500,
+                )
+            }
+        }
+    }
+}
+
+/** 小色板：米白三色、彩虹五色、跟随系统左浅右深。 */
+@Composable
+private fun ThemeSwatch(mode: ThemeMode) {
+    val colors: List<Color> = when (mode) {
+        ThemeMode.CREAM -> listOf(CreamPalette.bg, CreamPalette.gold, CreamPalette.text)
+        ThemeMode.RAINBOW -> listOf(
+            Color(0xFFFF4FA3), Color(0xFFFF9A3C), Color(0xFFFFD84A),
+            Color(0xFF34C7B4), Color(0xFF7B5CFF),
+        )
+        ThemeMode.SYSTEM -> listOf(
+            CreamPalette.bg, CreamPalette.gold, NightPalette.bg, NightPalette.gold,
+        )
+    }
+    Row(
+        Modifier
+            .size(46.dp, 20.dp)
+            .clip(RoundedCornerShape(5.dp))
+            .border(0.8.dp, XC.lineStrong, RoundedCornerShape(5.dp)),
+    ) {
+        colors.forEach { c -> Box(Modifier.weight(1f).fillMaxHeight().background(c)) }
+    }
+}
+
+/** 设置项里的小标题。 */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, color = XC.text, fontSize = 12.5.sp, fontWeight = W500)
+}
+
+/** 进度条三选一，预览是一小截真实液面。 */
+@Composable
+private fun BarPicker(current: String, onPick: (BarStyle) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        BarStyle.entries.forEach { st ->
+            val sel = st.key == current
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (sel) XC.gold.copy(alpha = 0.10f) else XC.fill)
+                    .border(
+                        if (sel) 1.4.dp else 0.8.dp,
+                        if (sel) XC.gold.copy(alpha = 0.8f) else XC.lineStrong,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onPick(st) }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // 预览：空槽 + 七成液面
+                Box(
+                    Modifier
+                        .size(46.dp, 9.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(XC.trackFill)
+                        .border(0.8.dp, XC.trackEdge, RoundedCornerShape(5.dp)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(0.7f)
+                            .fillMaxHeight()
+                            .background(barBrush(st)),
+                    )
+                }
+                Spacer(Modifier.height(9.dp))
+                Text(
+                    st.label,
+                    color = if (sel) XC.gold else XC.textDim,
+                    fontSize = 11.5.sp,
+                    fontWeight = if (sel) W600 else W500,
+                )
+            }
+        }
     }
 }

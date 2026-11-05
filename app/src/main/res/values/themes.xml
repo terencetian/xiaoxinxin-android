@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Xiaoxinxin" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF0A1526</item>
-        <item name="android:navigationBarColor">#FF0A1526</item>
-        <item name="android:windowLightStatusBar">false</item>
+    <!-- 界面配色由 Compose 侧主导（米白 / 彩虹 / 跟随系统），
+         这里只负责冷启动那一瞬的底色，用米白对齐默认主题。
+         系统栏颜色置空，让 Compose 背景直接铺上去。 -->
+    <style name="Theme.Xiaoxinxin" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF7F3EA</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

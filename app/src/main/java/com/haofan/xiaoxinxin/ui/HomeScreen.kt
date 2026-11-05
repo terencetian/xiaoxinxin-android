@@ -19,7 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -91,7 +93,7 @@ fun HomeScreen(
                                     fontWeight = W600,
                                     fontFamily = NumFont,
                                     shadow = Shadow(
-                                        color = XC.gold.copy(alpha = 0.38f),
+                                        color = XC.gold.copy(alpha = if (XC.isDark) 0.38f else 0.16f),
                                         offset = Offset.Zero,
                                         blurRadius = 14f,
                                     ),
@@ -114,7 +116,7 @@ fun HomeScreen(
                     }
 
                     Spacer(Modifier.height(18.dp))
-                    GlassProgress(if (s.salary > 0) progress.toFloat() else 0f)
+                    GlassProgress(if (s.salary > 0) progress.toFloat() else 0f, s.barStyle)
                     Spacer(Modifier.height(9.dp))
                     Text(
                         if (s.salary > 0)
@@ -230,10 +232,10 @@ private fun SetupCard(onOpen: () -> Unit) {
                 Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFFFFE9A8), XC.gold))),
+                    .background(Brush.linearGradient(listOf(XC.goldHi, XC.gold))),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("1", color = Color(0xFF2A1E00), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("1", color = XC.onGold, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -267,7 +269,7 @@ private fun FloatHintCard(onEnable: () -> Unit) {
                 Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0x33FFD257), Color(0x14FFD257)))),
+                    .background(Brush.linearGradient(listOf(XC.gold.copy(alpha = 0.20f), XC.gold.copy(alpha = 0.06f)))),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("浮", color = XC.gold, fontSize = 14.sp, fontWeight = W500)
@@ -301,15 +303,15 @@ private fun TopBar(onOpenSettings: () -> Unit, onToggleFloat: () -> Unit, floatO
                 modifier = Modifier
                     .size(28.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFFFFE38C), XC.gold, XC.goldDim))),
+                    .background(Brush.linearGradient(listOf(XC.goldHi, XC.gold, XC.goldDim))),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("薪", color = Color(0xFF2A1E00), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("薪", color = XC.onGold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(9.dp))
             Text("小薪薪", color = XC.text, fontSize = 14.5.sp, fontWeight = W500)
             Spacer(Modifier.width(6.dp))
-            Text("v1.9.4", color = XC.textFaint, fontSize = 10.5.sp)
+            Text("v1.9.5", color = XC.textFaint, fontSize = 10.5.sp)
             Spacer(Modifier.weight(1f))
             RoundGlassButton(active = floatOn, onClick = onToggleFloat) {
                 Text("浮", color = if (floatOn) XC.gold else XC.textDim, fontSize = 13.sp, fontWeight = W500)
@@ -338,14 +340,14 @@ private fun RoundGlassButton(active: Boolean, onClick: () -> Unit, content: @Com
                 if (active) Brush.linearGradient(
                     listOf(XC.gold.copy(alpha = 0.20f), XC.gold.copy(alpha = 0.10f))
                 )
-                else Brush.linearGradient(listOf(Color(0x1AFFFFFF), Color(0x08FFFFFF)))
+                else Brush.linearGradient(listOf(XC.ghostA, XC.ghostB))
             )
             .border(
                 0.8.dp,
                 Brush.verticalGradient(
                     listOf(
-                        if (active) XC.gold.copy(alpha = 0.6f) else Color(0x4DFFFFFF),
-                        Color(0x0DFFFFFF),
+                        if (active) XC.gold.copy(alpha = 0.6f) else XC.ghostEdge,
+                        Color.Transparent,
                     )
                 ),
                 shape,
@@ -355,42 +357,39 @@ private fun RoundGlassButton(active: Boolean, onClick: () -> Unit, content: @Com
     ) { content() }
 }
 
-/** 玻璃槽 + 金色液面 + 端头高光点。 */
+/**
+ * 玻璃槽 + 液面 + 顶部反光。
+ *
+ * 液面渐变按整条轨道宽度铺，再用 clipRect 裁出左侧进度段 —— 这样彩虹条是
+ * 「随着进度一点点露出粉橙黄青紫」，而不是一小段被压扁的彩虹。
+ */
 @Composable
-private fun GlassProgress(p: Float) {
+private fun GlassProgress(p: Float, style: String = "gold") {
     val v = p.coerceIn(0f, 1f)
-    BoxWithConstraints(
+    val brush = barBrush(BarStyle.of(style))
+    Box(
         Modifier
             .fillMaxWidth()
             .height(9.dp)
             .clip(RoundedCornerShape(5.dp))
-            .background(Color(0x1FFFFFFF))
-            .border(0.8.dp, Color(0x14FFFFFF), RoundedCornerShape(5.dp)),
+            .background(XC.trackFill)
+            .border(0.8.dp, XC.trackEdge, RoundedCornerShape(5.dp)),
     ) {
-        val full = maxWidth
         if (v > 0f) {
             Box(
                 Modifier
-                    .width(full * v)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(XC.goldDim.copy(alpha = 0.85f), XC.gold, Color(0xFFFFE9A8))
-                        )
-                    ),
+                    .fillMaxSize()
+                    .drawWithContent {
+                        clipRect(right = size.width * v) { this@drawWithContent.drawContent() }
+                    },
             ) {
+                Box(Modifier.fillMaxSize().background(brush))
                 // 顶部一道细高光，做出液体的厚度
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .height(3.dp)
-                        .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0x66FFFFFF), Color.Transparent)
-                            )
-                        ),
+                        .background(Brush.verticalGradient(listOf(XC.sheen, Color.Transparent))),
                 )
             }
         }
@@ -447,17 +446,15 @@ private fun PunchButton(working: Boolean, label: String, workedText: String?, on
                 .height(55.dp)
                 .clip(shape)
                 .background(
-                    if (working) Brush.linearGradient(listOf(Color(0x1AFFFFFF), Color(0x0AFFFFFF)))
-                    else Brush.linearGradient(
-                        listOf(Color(0xFFFFE9A8), XC.gold, Color(0xFFECC14A))
-                    )
+                    if (working) Brush.linearGradient(listOf(XC.ghostA, XC.ghostB))
+                    else Brush.verticalGradient(listOf(XC.goldHi, XC.gold, XC.goldDim))
                 )
                 .border(
                     if (working) 0.9.dp else 0.dp,
                     Brush.verticalGradient(
                         listOf(
                             if (working) XC.gold.copy(alpha = 0.65f) else Color.Transparent,
-                            Color(0x0DFFFFFF),
+                            Color.Transparent,
                         )
                     ),
                     shape,
@@ -474,13 +471,13 @@ private fun PunchButton(working: Boolean, label: String, workedText: String?, on
                         .align(Alignment.TopCenter)
                         .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
                         .background(
-                            Brush.verticalGradient(listOf(Color(0x4DFFFFFF), Color.Transparent))
+                            Brush.verticalGradient(listOf(XC.sheen, Color.Transparent))
                         ),
                 )
             }
             Text(
                 label,
-                color = if (working) XC.gold else Color(0xFF241A00),
+                color = if (working) XC.gold else XC.onGold,
                 fontSize = 15.5.sp,
                 fontWeight = W600,
                 letterSpacing = 1.2.sp,

@@ -28,6 +28,8 @@ data class EarnState(
     val floatX: Int = -1,                 // -1 表示未定位，首次贴右上
     val floatY: Int = -1,
     val floatMini: Boolean = false,        // 悬浮窗迷你形态
+    val themeMode: String = "cream",       // cream / rainbow / system
+    val barStyle: String = "gold",         // gold / solid / rainbow
 
     val barSymbol: String = "",
     val dayLog: Map<String, DayLog> = emptyMap(),

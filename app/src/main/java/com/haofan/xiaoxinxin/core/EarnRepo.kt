@@ -60,6 +60,8 @@ object EarnRepo {
         floatX = if (p.getInt("floatLayoutVer", 1) >= FLOAT_LAYOUT_VERSION) p.getInt("floatX", -1) else -1,
         floatY = if (p.getInt("floatLayoutVer", 1) >= FLOAT_LAYOUT_VERSION) p.getInt("floatY", -1) else -1,
         floatMini = p.getBoolean("floatMini", false),
+        themeMode = p.getString("themeMode", "cream") ?: "cream",
+        barStyle = p.getString("barStyle", "gold") ?: "gold",
         barSymbol = p.getString("barSymbol", "") ?: "",
         dayLog = decodeDayLog(p.getString("dayLog", "{}") ?: "{}"),
         dayKey = p.getString("dayKey", "") ?: "",
@@ -85,6 +87,8 @@ object EarnRepo {
             .putInt("floatY", s.floatY)
             .putInt("floatLayoutVer", FLOAT_LAYOUT_VERSION)
             .putBoolean("floatMini", s.floatMini)
+            .putString("themeMode", s.themeMode)
+            .putString("barStyle", s.barStyle)
             .putString("barSymbol", s.barSymbol)
             .putString("dayLog", encodeDayLog(s.dayLog))
             .putString("dayKey", s.dayKey)
@@ -245,6 +249,8 @@ object EarnRepo {
     fun setIslandEnabled(v: Boolean) = update { it.copy(islandEnabled = v) }
     fun setFloatPosition(x: Int, y: Int) = update { it.copy(floatX = x, floatY = y) }
     fun setFloatMini(v: Boolean) = update { it.copy(floatMini = v) }
+    fun setThemeMode(v: String) = update { it.copy(themeMode = v) }
+    fun setBarStyle(v: String) = update { it.copy(barStyle = v) }
 
     // ---------------- 流水明细 ----------------
 
