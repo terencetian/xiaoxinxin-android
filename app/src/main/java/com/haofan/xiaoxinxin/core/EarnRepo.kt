@@ -19,6 +19,9 @@ object EarnRepo {
 
     private const val PREF = "xiaoxinxin"
 
+    /** 悬浮岛布局版本：2 = 贴顶药丸岛。老用户升级时据此丢弃旧坐标。 */
+    private const val FLOAT_LAYOUT_VERSION = 2
+
     private var prefs: SharedPreferences? = null
     private val _state = MutableStateFlow(EarnState())
     val state: StateFlow<EarnState> = _state.asStateFlow()
@@ -51,8 +54,11 @@ object EarnRepo {
         overtimeSeconds = p.getFloat("overtimeSeconds", 0f).toDouble(),
         autoClockOut = p.getBoolean("autoClockOut", true),
         floatEnabled = p.getBoolean("floatEnabled", false),
-        floatX = p.getInt("floatX", -1),
-        floatY = p.getInt("floatY", -1),
+        islandEnabled = p.getBoolean("islandEnabled", false),
+        // 布局 v1 是「挂在状态栏下面的小胶囊」，坐标和 v2 的贴顶岛不通用；
+        // 升级时把旧坐标丢掉，否则用户装完还停在老位置，会以为改动没生效。
+        floatX = if (p.getInt("floatLayoutVer", 1) >= FLOAT_LAYOUT_VERSION) p.getInt("floatX", -1) else -1,
+        floatY = if (p.getInt("floatLayoutVer", 1) >= FLOAT_LAYOUT_VERSION) p.getInt("floatY", -1) else -1,
         floatMini = p.getBoolean("floatMini", false),
         barSymbol = p.getString("barSymbol", "") ?: "",
         dayLog = decodeDayLog(p.getString("dayLog", "{}") ?: "{}"),
@@ -74,8 +80,10 @@ object EarnRepo {
             .putFloat("overtimeSeconds", s.overtimeSeconds.toFloat())
             .putBoolean("autoClockOut", s.autoClockOut)
             .putBoolean("floatEnabled", s.floatEnabled)
+            .putBoolean("islandEnabled", s.islandEnabled)
             .putInt("floatX", s.floatX)
             .putInt("floatY", s.floatY)
+            .putInt("floatLayoutVer", FLOAT_LAYOUT_VERSION)
             .putBoolean("floatMini", s.floatMini)
             .putString("barSymbol", s.barSymbol)
             .putString("dayLog", encodeDayLog(s.dayLog))
@@ -234,6 +242,7 @@ object EarnRepo {
     fun setBarSymbol(v: String) = update { it.copy(barSymbol = v.take(2)) }
 
     fun setFloatEnabled(v: Boolean) = update { it.copy(floatEnabled = v) }
+    fun setIslandEnabled(v: Boolean) = update { it.copy(islandEnabled = v) }
     fun setFloatPosition(x: Int, y: Int) = update { it.copy(floatX = x, floatY = y) }
     fun setFloatMini(v: Boolean) = update { it.copy(floatMini = v) }
 

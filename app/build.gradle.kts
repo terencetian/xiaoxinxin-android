@@ -15,8 +15,8 @@ android {
         minSdk = 26
         // targetSdk 暂留 35：API 36 强制 edge-to-edge，先把岛跑通再单独做视觉回归
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.9.3"
+        versionCode = 29
+        versionName = "1.9.4"
         resourceConfigurations += listOf("zh", "en")
     }
 

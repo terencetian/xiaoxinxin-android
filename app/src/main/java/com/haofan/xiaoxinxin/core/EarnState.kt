@@ -23,7 +23,8 @@ data class EarnState(
     val overtimeSeconds: Double = 0.0,
 
     val autoClockOut: Boolean = true,
-    val floatEnabled: Boolean = false,
+    val floatEnabled: Boolean = false,     // 自绘的顶部悬浮岛
+    val islandEnabled: Boolean = false,    // 系统级实时通知（小米超级岛等）
     val floatX: Int = -1,                 // -1 表示未定位，首次贴右上
     val floatY: Int = -1,
     val floatMini: Boolean = false,        // 悬浮窗迷你形态

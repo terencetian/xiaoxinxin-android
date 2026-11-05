@@ -30,6 +30,7 @@ import com.haofan.xiaoxinxin.core.IslandReport
 import com.haofan.xiaoxinxin.core.dateKey
 import com.haofan.xiaoxinxin.core.fmt
 import com.haofan.xiaoxinxin.core.isValidDayKey
+import com.haofan.xiaoxinxin.floatx.FloatService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,7 +76,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             Spacer(Modifier.width(10.dp))
             Text("设置", color = XC.text, fontSize = 16.sp, fontWeight = W500)
             Spacer(Modifier.weight(1f))
-            Text("v1.9.3", color = XC.textFaint, fontSize = 11.sp)
+            Text("v1.9.4", color = XC.textFaint, fontSize = 11.sp)
         }
 
         Spacer(Modifier.height(18.dp))
@@ -124,9 +125,35 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        Group("外观与窗口") {
-            ToggleRow("顶部悬浮岛", "单击展开、双击迷你、长按隐藏；可自由拖动并贴边吸附", s.floatEnabled) {
+        Group("显示与通知") {
+            ToggleRow(
+                "悬浮窗",
+                "自己画的顶部药丸：可拖动、贴边吸附、点开看今日和本月。任何机型都能用",
+                s.floatEnabled,
+            ) {
                 EarnRepo.setFloatEnabled(it)
+                FloatService.applyToggle(ctx)
+            }
+            Spacer(Modifier.height(10.dp))
+            // probe 是异步来的，没回来之前不能直接判「不支持」，否则会闪一下灰 + 误报提示
+            val checking = probe == null && IslandDoctor.platformCapable()
+            val islandOk = probe?.canPromote == true
+            ToggleRow(
+                "灵动岛",
+                when {
+                    checking -> "正在检测系统支持…"
+                    islandOk -> "交给系统渲染的实时通知，能进状态栏、锁屏和通知栏置顶"
+                    else -> IslandDoctor.brandHint()
+                },
+                s.islandEnabled,
+                enabled = islandOk,
+            ) {
+                EarnRepo.setIslandEnabled(it)
+                FloatService.applyToggle(ctx)
+            }
+            if (!checking && !islandOk) {
+                Spacer(Modifier.height(8.dp))
+                Hint("这个开关灰掉不是 bug：系统没开放标准实时通知接口，改设置也打不开。上面的悬浮窗就是替代方案。")
             }
             Spacer(Modifier.height(10.dp))
             Field("通知栏金额前缀", s.barSymbol, { EarnRepo.setBarSymbol(it) }, "可留空", KeyboardType.Text)
@@ -352,17 +379,24 @@ private fun Hint(text: String, color: Color = XC.textFaint) {
 }
 
 @Composable
-private fun ToggleRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ToggleRow(
+    title: String,
+    desc: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onChange: (Boolean) -> Unit,
+) {
+    val titleColor = if (enabled) XC.text else XC.textFaint
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable { onChange(!checked) }
+            .clickable(enabled = enabled) { onChange(!checked) }
             .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = XC.text, fontSize = 13.sp)
+            Text(title, color = titleColor, fontSize = 13.sp)
             Spacer(Modifier.height(2.dp))
             Text(desc, color = XC.textFaint, fontSize = 10.5.sp, lineHeight = 15.sp)
         }
@@ -373,8 +407,11 @@ private fun ToggleRow(title: String, desc: String, checked: Boolean, onChange: (
                 .height(28.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(
-                    if (checked) Brush.linearGradient(listOf(XC.gold, Color(0xFFFFE08A)))
-                    else Brush.linearGradient(listOf(Color(0x33FFFFFF), Color(0x1FFFFFFF)))
+                    when {
+                        !enabled -> Brush.linearGradient(listOf(Color(0x14FFFFFF), Color(0x0AFFFFFF)))
+                        checked -> Brush.linearGradient(listOf(XC.gold, Color(0xFFFFE08A)))
+                        else -> Brush.linearGradient(listOf(Color(0x33FFFFFF), Color(0x1FFFFFFF)))
+                    }
                 ),
             contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
         ) {
@@ -383,7 +420,13 @@ private fun ToggleRow(title: String, desc: String, checked: Boolean, onChange: (
                     .padding(horizontal = 3.dp)
                     .size(22.dp)
                     .clip(CircleShape)
-                    .background(if (checked) Color(0xFF241A00) else Color(0xE6F4F7FA)),
+                    .background(
+                        when {
+                            !enabled -> Color(0x66F4F7FA)
+                            checked -> Color(0xFF241A00)
+                            else -> Color(0xE6F4F7FA)
+                        }
+                    ),
             )
         }
     }

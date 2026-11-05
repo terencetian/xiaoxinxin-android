@@ -38,6 +38,38 @@ object IslandDoctor {
     private const val CHANNEL = "island_probe"
     private const val TEST_ID = 9001
 
+    /**
+     * 各厂商对「标准实时通知」的放行情况。
+     * 小米 / 荣耀 / vivo 三条是 2026-11-05 真机实测，其余来自厂商公开文档。
+     */
+    private fun brandOf(): String {
+        val m = Build.MANUFACTURER.lowercase()
+        return when {
+            m.contains("xiaomi") || m.contains("redmi") || m.contains("poco") -> "xiaomi"
+            m.contains("honor") -> "honor"
+            m.contains("vivo") || m.contains("iqoo") -> "vivo"
+            m.contains("oppo") || m.contains("oneplus") || m.contains("realme") -> "oppo"
+            m.contains("huawei") -> "huawei"
+            m.contains("samsung") -> "samsung"
+            else -> "other"
+        }
+    }
+
+    private fun brandNote(): String = when (brandOf()) {        "xiaomi" -> "小米系：HyperOS 3 / Android 16 起走标准 API，实测可用"
+        "honor" -> "荣耀：灵动胶囊是自研通道，需白名单，实测标准 API 不生效"
+        "vivo" -> "vivo/iQOO：原子岛自研协议，个人开发者无接入路径"
+        "oppo" -> "OPPO 系：ColorOS 16 起宣称兼容标准实时通知，待实测"
+        "huawei" -> "华为：新机为 HarmonyOS NEXT，不装 APK，需另做 ArkTS 版"
+        "samsung" -> "三星：One UI 8 起支持标准实时通知"
+        else -> "其他品牌：按标准 API 行为，以实测结果为准"
+    }
+
+    /** 给设置页用的一句话说明：这台机器为什么用不了/能用系统岛。 */
+    fun brandHint(): String = brandNote()
+
+    /** 系统岛在当前机器上是否可能有戏（版本 + 厂商放行，未发起探测时为乐观值）。 */
+    fun platformCapable(): Boolean = Build.VERSION.SDK_INT >= 36
+
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val mgr = ctx.getSystemService(NotificationManager::class.java)
@@ -94,8 +126,13 @@ object IslandDoctor {
         }
 
         val verdict = when {
-            sdk < 36 -> "系统版本不够，只能靠悬浮岛"
+            sdk < 36 -> when (brandOf()) {
+                "vivo", "honor" -> "这台机器只可能用悬浮岛：系统版本不够且厂商通道不对第三方开放"
+                else -> "系统版本不够，只能靠悬浮岛"
+            }
             !notifEnabled -> "通知总开关关着，先打开通知"
+            !canPromote && brandOf() in listOf("vivo", "honor") ->
+                "${Build.MANUFACTURER} 未放行标准实时通知，这是厂商策略，改设置也打不开；悬浮岛是长久方案"
             !canPromote -> "系统未放行本应用：必须走厂商白名单/合作，悬浮岛兜底"
             promoted -> "标准 API 已生效，系统岛上能看到"
             !promotable -> "通知形态不满足提升条件（被系统改写过？）"
@@ -105,6 +142,7 @@ object IslandDoctor {
         val rows = listOf(
             "机型" to "${Build.MANUFACTURER} ${Build.MODEL}",
             "系统" to "${Build.VERSION.RELEASE}（API $sdk）· ${Build.DISPLAY}",
+            "厂商通道" to brandNote(),
             "实时通知权限" to if (sdk >= 36) (if (canPromote) "已放行" else "未放行") else "系统不支持",
             "能否提升" to if (sdk >= 36) (if (promotable) "满足条件" else "不满足") else "—",
             "实测结果" to testNote,

@@ -25,6 +25,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.haofan.xiaoxinxin.MainActivity
@@ -65,6 +66,26 @@ class FloatService : Service() {
             }
         }
 
+        /**
+         * 两个开关共用同一个前台服务：悬浮岛要它来画，系统岛要它来发通知。
+         * 只要还有一个开着就得跑；都关了才停。
+         */
+        fun needed(ctx: Context) {
+            val s = EarnRepo.state.value
+            syncVisibility(ctx, s.floatEnabled || s.islandEnabled)
+        }
+
+        /** 设置页拨完开关调用：先决定该不该跑，再让已在跑的服务就地应用新状态。 */
+        fun applyToggle(ctx: Context) {
+            needed(ctx)
+            val s = EarnRepo.state.value
+            if (s.floatEnabled || s.islandEnabled) {
+                runCatching {
+                    ctx.startService(Intent(ctx, FloatService::class.java).setAction("sync"))
+                }
+            }
+        }
+
         /** 主界面在前台时自动收起悬浮岛 —— 否则它会压在自己的标题栏上。 */
         @Volatile
         private var appForeground = false
@@ -98,7 +119,7 @@ class FloatService : Service() {
         computeMetrics()
         ensureChannel()
         startForeground(NOTIF_ID, buildNotification(EarnRepo.state.value))
-        addOverlay()
+        if (EarnRepo.state.value.floatEnabled) addOverlay()
         ticker = scope.launch {
             while (true) {
                 val s = EarnRepo.state.value
@@ -115,13 +136,33 @@ class FloatService : Service() {
         when (intent?.action) {
             "stop" -> {
                 EarnRepo.setFloatEnabled(false)
+                EarnRepo.setIslandEnabled(false)
                 stopSelf()
                 return START_NOT_STICKY
             }
             "hide_overlay" -> setOverlayVisible(false)
             "show_overlay" -> setOverlayVisible(true)
+            "sync" -> applyToggles()
+        }
+        if (!EarnRepo.state.value.floatEnabled && !EarnRepo.state.value.islandEnabled) {
+            stopSelf()
+            return START_NOT_STICKY
         }
         return START_STICKY
+    }
+
+    /** 设置页拨了开关后，就地增删悬浮窗、重发通知，不用把服务重启一遍。 */
+    private fun applyToggles() {
+        val s = EarnRepo.state.value
+        if (s.floatEnabled) {
+            if (view == null) addOverlay() else setOverlayVisible(true)
+        } else {
+            view?.let { runCatching { wm.removeView(it) } }
+            view = null
+            lp = null
+            overlayAttached = false
+        }
+        notify(buildNotification(s))
     }
 
     override fun onDestroy() {
@@ -157,14 +198,42 @@ class FloatService : Service() {
     }
 
     private fun sizeOf(m: FloatingView.Mode): Pair<Int, Int> = when (m) {
-        FloatingView.Mode.MINI -> dp(108) to dp(38)
-        FloatingView.Mode.PILL -> dp(192) to dp(44)
-        FloatingView.Mode.CARD -> dp(318) to dp(136)
+        FloatingView.Mode.MINI -> dp(88) to dp(32)
+        FloatingView.Mode.PILL -> dp(132) to dp(36)
+        FloatingView.Mode.CARD -> dp(316) to dp(150)
+    }.let { (w, h) -> w to h + touchPad() }
+
+    /**
+     * 状态栏区域里的触摸会被系统 StatusBar 窗口吃掉，覆盖层抢不到。
+     * 所以视觉上贴顶、窗口底部再挂一条透明触摸带 —— 药丸画在上面，
+     * 手指点在它下面一点也照样有效。
+     */
+    private fun touchPad(): Int = dp(20)
+
+    /**
+     * 药丸的默认纵坐标：上探到状态栏里约 45%，下半截露在状态栏下面。
+     *
+     * 为什么不能完全贴顶：状态栏窗口盖在覆盖层之上，落在状态栏范围内的触摸
+     * 由它接管，覆盖层一个事件都收不到（实测 114px 以上全部被吃掉）。
+     * 上探 45% 已经是「看起来长在屏幕上」和「点得到」之间的平衡点。
+     */
+    /**
+     * 拖动/布局的下界保护栏 —— 药丸最多探进状态栏 16dp。
+     *
+     * 状态栏范围内的触摸由系统 StatusBar 接管，覆盖层收不到（实测整个状态栏高度全被吃掉），
+     * 所以一旦让药丸滑得更靠上，用户就会觉得「点不动了」，同时还挡住了时间和信号。
+     */
+    private fun guardY(): Int = (topInset - dp(16)).coerceAtLeast(0)
+
+    private fun islandTop(winH: Int): Int {
+        val visualH = winH - touchPad()
+        return (topInset - (visualH * 0.45f).toInt()).coerceAtLeast(guardY())
     }
 
     // ---------------- 悬浮岛 ----------------
 
     private fun addOverlay() {
+        if (view != null) return
         if (!android.provider.Settings.canDrawOverlays(this)) return
         val s = EarnRepo.state.value
         val v = FloatingView(this)
@@ -175,7 +244,7 @@ class FloatService : Service() {
 
         val (w, h) = sizeOf(mode)
         val cx = if (s.floatX >= 0) s.floatX else screenW / 2
-        val y = if (s.floatY >= 0) s.floatY else topInset + dp(6)
+        val y = if (s.floatY >= 0) s.floatY else islandTop(h)
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -189,8 +258,13 @@ class FloatService : Service() {
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
+            // 不设这个的话窗口会被系统挡在挖孔/状态栏下方，贴顶和触摸都会失效
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
             x = (cx - w / 2).coerceIn(0, (screenW - w).coerceAtLeast(0))
-            this.y = y.coerceIn(topInset, (screenH - h).coerceAtLeast(topInset))
+            this.y = y.coerceIn(guardY(), (screenH - h).coerceAtLeast(guardY()))
         }
         runCatching { wm.addView(v, p) }.onSuccess {
             view = v
@@ -218,7 +292,7 @@ class FloatService : Service() {
         p.width = w
         p.height = h
         p.x = (cx - w / 2).coerceIn(0, (screenW - w).coerceAtLeast(0))
-        p.y = y.coerceIn(topInset, (screenH - h).coerceAtLeast(topInset))
+        p.y = y.coerceIn(guardY(), (screenH - h).coerceAtLeast(guardY()))
         runCatching { wm.updateViewLayout(v, p) }
     }
 
@@ -238,8 +312,9 @@ class FloatService : Service() {
 
         v.mode = target
         animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 240
-            interpolator = DecelerateInterpolator()
+            duration = 300
+            // 轻微过冲：展开时像「弹出来」，收起时像「吸回去」，比匀速减速有生气
+            interpolator = OvershootInterpolator(0.75f)
             addUpdateListener { a ->
                 val t = a.animatedValue as Float
                 val w = (fromW + (toW - fromW) * t).roundToInt()
@@ -290,7 +365,9 @@ class FloatService : Service() {
                     }
                     if (moved) {
                         p.x = startX + dx.toInt()
-                        p.y = startY + dy.toInt()
+                        // 顶部保护栏：再往上就滑进状态栏，既挡住时间和信号，又点不到
+                        p.y = (startY + dy.toInt())
+                            .coerceIn(guardY(), (screenH - p.height).coerceAtLeast(guardY()))
                         runCatching { wm.updateViewLayout(v, p) }
                     }
                 }
@@ -356,7 +433,7 @@ class FloatService : Service() {
                 start()
             }
         }
-        EarnRepo.setFloatPosition(target, y.coerceIn(topInset, (screenH - h).coerceAtLeast(topInset)))
+        EarnRepo.setFloatPosition(target, y.coerceIn(guardY(), (screenH - h).coerceAtLeast(guardY())))
     }
 
     private fun toast(msg: String) {
@@ -395,8 +472,9 @@ class FloatService : Service() {
         val title = getString(if (s.working) R.string.notif_title_tracking else R.string.notif_title_idle)
         val text = if (s.working) "$money · 已工作 ${mins / 60}h${mins % 60}m" else "点开打卡开始计费"
 
-        // Android 16：走系统「实时更新」，满足条件会被提升成岛
-        if (Build.VERSION.SDK_INT >= 36 && LiveUpdate.allowed(this)) {
+        // Android 16：走系统「实时更新」，满足条件会被提升成岛。
+        // 只有用户自己打开了「灵动岛」开关才这么发 —— 否则就是一条普通常驻通知。
+        if (s.islandEnabled && Build.VERSION.SDK_INT >= 36 && LiveUpdate.allowed(this)) {
             return LiveUpdate.build(
                 this, CHANNEL_ID, title, text, money,
                 (s.progress() * 100).toInt(), pi,
@@ -463,14 +541,28 @@ class FloatingView(ctx: Context) : View(ctx) {
     private val d = resources.displayMetrics.density
     private val sd = resources.displayMetrics.scaledDensity
 
+    /** 窗口底部留出的透明触摸带高度，对应 FloatService.touchPad()。 */
+    private val bottomPad = 20f * d
+
     private fun px(v: Float) = v * d
     private fun sp(v: Float) = v * sd
 
-    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xF00B1424.toInt() }
+    /**
+     * 纯黑底。系统岛在 OLED 上就是用纯黑跟挖孔、边框融成一体，
+     * 所以这里不能再用半透明深蓝 —— 那会显得像「一个浮在外面的卡片」。
+     */
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF000000.toInt() }
     private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 0.8f * d
-        color = 0x40FFFFFF
+        strokeWidth = 0.7f * d
+        color = 0x33FFFFFF
+    }
+
+    /** 内侧一圈极淡高光：让纯黑药丸在深色壁纸上也有轮廓，不至于糊成一团。 */
+    private val innerEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * d
+        color = 0x14FFFFFF
     }
     private val moneyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = GOLD
@@ -506,14 +598,17 @@ class FloatingView(ctx: Context) : View(ctx) {
 
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
-        val h = height.toFloat()
+        // 底部这条是触摸带，只吃不画 —— 视觉高度和窗口高度不是一回事。
+        val h = height.toFloat() - bottomPad
         if (w <= 0f || h <= 0f) return
         val m = morph
 
-        // 药丸圆角：收起来是全圆角，展开是 28dp
-        val r = if (mode == Mode.MINI) h / 2 else lerp(h / 2, px(28f), m)
+        // 药丸圆角：收起来是全圆角，展开是 26dp
+        val r = if (mode == Mode.MINI) h / 2 else lerp(h / 2, px(26f), m)
         rect.set(0f, 0f, w, h)
         canvas.drawRoundRect(rect, r, r, bgPaint)
+        rect.set(d, d, w - d, h - d)
+        canvas.drawRoundRect(rect, (r - d).coerceAtLeast(0f), (r - d).coerceAtLeast(0f), innerEdgePaint)
         rect.set(0.4f, 0.4f, w - 0.4f, h - 0.4f)
         canvas.drawRoundRect(rect, r, r, edgePaint)
 
@@ -528,28 +623,24 @@ class FloatingView(ctx: Context) : View(ctx) {
             return
         }
 
-        // —— 收起态：今日 ¥52.77 · 右侧金点 ——
+        // —— 收起态：呼吸金点 + 金额，整体居中，像岛里的一条实时读数 ——
         val pillF = 1f - m
         if (pillF > 0.02f) {
-            subPaint.textSize = sp(10.5f)
-            subPaint.color = tint(SUB, pillF)
-            val prefix = "今日 "
-            val pw = subPaint.measureText(prefix)
-            val base = h / 2f + subPaint.textSize * 0.36f
-            canvas.drawText(prefix, pad, base, subPaint)
-
-            moneyPaint.textSize = lerp(sp(15f), sp(27f), m)
-            moneyPaint.color = tint(GOLD, pillF)
-            canvas.drawText(money, pad + pw, base, moneyPaint)
-
-            var dotR = px(2.6f)
+            var dotR = px(2.8f)
             if (state.working) {
                 // 呼吸感：靠时间算半径，不用动画器
                 val phase = (SystemClock.uptimeMillis() % 1600L) / 1600f
                 dotR *= 0.8f + 0.35f * kotlin.math.sin(phase * 6.283f).toFloat()
             }
+            moneyPaint.textSize = lerp(sp(15f), sp(27f), m)
+            moneyPaint.color = tint(GOLD, pillF)
+            val mw = moneyPaint.measureText(money)
+            val gap = px(7f)
+            val left = (w - (dotR * 2 + gap + mw)) / 2f
+            val base = h / 2f + moneyPaint.textSize * 0.36f
             dotPaint.color = tint(GOLD, pillF)
-            canvas.drawCircle(w - pad - dotR, h / 2f, dotR, dotPaint)
+            canvas.drawCircle(left + dotR, h / 2f, dotR, dotPaint)
+            canvas.drawText(money, left + dotR * 2 + gap, base, moneyPaint)
         }
 
         // —— 展开态 ——

@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
         if (pendingFloatEnable && canDrawOverlays()) {
             pendingFloatEnable = false
             EarnRepo.setFloatEnabled(true)
-            FloatService.syncVisibility(this, true)
+            FloatService.needed(this)
         }
     }
 
@@ -82,12 +82,12 @@ class MainActivity : ComponentActivity() {
     private fun enableFloat(on: Boolean) {
         if (!on) {
             EarnRepo.setFloatEnabled(false)
-            FloatService.syncVisibility(this, false)
+            FloatService.needed(this)
             return
         }
         if (canDrawOverlays()) {
             EarnRepo.setFloatEnabled(true)
-            FloatService.syncVisibility(this, true)
+            FloatService.needed(this)
         } else {
             // 需要用户去系统设置里手动开启「显示在其他应用上层」
             pendingFloatEnable = true
