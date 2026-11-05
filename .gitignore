@@ -13,4 +13,9 @@ keystore.properties
 release/
 dist/
 *.apk
-screenshots/
+
+# 旧版截图（v1.9.2 时期，留本地不入库；README 用的是 01-04 新图）
+screenshots/first-run.png
+screenshots/float-on-desktop.png
+screenshots/home.png
+screenshots/settings.png
