@@ -14,7 +14,7 @@ Mac 版「小薪薪」的手机版。填月薪、打卡，屏幕上实时显示�
 
 ## 装上试试
 
-1. 到 [Releases](../../releases) 下载最新的 `小薪薪-vX.X.X-测试版.apk`
+1. 到 [Releases](https://github.com/terencetian/xiaoxinxin-android/releases) 下载最新的 `xiaoxinxin-android-vX.X.X-beta.apk`
 2. 手机上点开安装，允许「安装未知来源应用」
 3. 首次打开给两个权限：**通知**（状态栏常驻金额）、**悬浮窗**（顶部药丸）
 4. 填月薪 → 打卡上班
