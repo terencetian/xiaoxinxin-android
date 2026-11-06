@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,7 +39,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen() {
     val s by EarnRepo.state.collectAsState()
     var startKey by remember { mutableStateOf("") }
     var endKey by remember { mutableStateOf("") }
@@ -59,25 +60,18 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     val rows = s.dayLogRows(startKey, endKey)
 
-    LiquidBackground {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .systemBarsPadding()
+            .windowInsetsPadding(WindowInsets.statusBars)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(32.dp).clip(CircleShape).background(XC.fill)
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center,
-            ) { Text("‹", color = XC.textDim, fontSize = 20.sp) }
-            Spacer(Modifier.width(10.dp))
-            Text("设置", color = XC.text, fontSize = 16.sp, fontWeight = W500)
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("设置", color = XC.text, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, letterSpacing = -0.5.sp)
             Spacer(Modifier.weight(1f))
-            Text("v1.9.5", color = XC.textFaint, fontSize = 11.sp)
+            Text("v1.9.8", color = XC.textFaint, fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
 
         Spacer(Modifier.height(18.dp))
@@ -122,6 +116,34 @@ fun SettingsScreen(onBack: () -> Unit) {
             ToggleRow("到点自动下班", "下班时间一到自动停表，加班段落不会被切断", s.autoClockOut) {
                 EarnRepo.setAutoClockOut(it)
             }
+            Spacer(Modifier.height(10.dp))
+            ToggleRow(
+                "到点自动上班",
+                "上班时间一到自动打卡计费，并发一条通知。靠系统闹钟触发，App 不开也生效",
+                s.autoClockIn,
+            ) {
+                EarnRepo.setAutoClockIn(it)
+                com.haofan.xiaoxinxin.core.AutoPunch.reschedule(ctx)
+            }
+            if (s.autoClockIn) {
+                Spacer(Modifier.height(8.dp))
+                Hint("Android 12+ 首次开启会引导授予「闹钟和提醒」；未授予也能用，触发时刻可能有 ±10 分钟误差。错过的时间不补打 —— App 没运行的时段本来就不计费。")
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Group("开机自启动") {
+            ToggleRow(
+                "重启后恢复自动上班",
+                "手机重启会把闹钟清掉，打开这个开关可在开机后自动恢复上面的到点打卡",
+                s.autoBoot,
+            ) {
+                EarnRepo.setAutoBoot(it)
+                if (it) com.haofan.xiaoxinxin.core.AutoPunch.reschedule(ctx)
+            }
+            Spacer(Modifier.height(8.dp))
+            Hint("本应用不需要开机常驻 —— 金额靠打卡时刻现算，进程死了数字也不会丢。「自启动」只做一件事：重启后把自动上班的闹钟排回去。小米 / 华为等深度定制系统可能拦截开机广播，被拦时打开一次 App 即可恢复。")
         }
 
         Spacer(Modifier.height(12.dp))
@@ -232,7 +254,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         Spacer(Modifier.height(12.dp))
 
-        Group("流水明细") {
+        Group("流水明细 · 补记与删除") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(Modifier.weight(1f)) {
                     Field("起始日期", startKey, { startKey = it }, "yyyy-MM-dd", KeyboardType.Text)
@@ -254,7 +276,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             if (rows.isEmpty()) {
-                Hint("这个区间还没有记录。今日数据以实时打卡为准，不入流水。")
+                Hint("这个区间还没有记录。今日数据以实时打卡为准，不入流水；想看今日构成请到「统计」页。")
             } else {
                 rows.forEach { (key, v) ->
                     Row(
@@ -334,8 +356,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(30.dp))
-    }
+        Spacer(Modifier.height(104.dp))
     }
 }
 
@@ -518,6 +539,7 @@ private fun ThemePicker(current: String, onPick: (ThemeMode) -> Unit) {
 private fun ThemeSwatch(mode: ThemeMode) {
     val colors: List<Color> = when (mode) {
         ThemeMode.CREAM -> listOf(CreamPalette.bg, CreamPalette.gold, CreamPalette.text)
+        ThemeMode.MINT -> listOf(MintPalette.bg, MintPalette.gold, MintPalette.text)
         ThemeMode.RAINBOW -> listOf(
             Color(0xFFFF4FA3), Color(0xFFFF9A3C), Color(0xFFFFD84A),
             Color(0xFF34C7B4), Color(0xFF7B5CFF),

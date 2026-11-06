@@ -186,6 +186,61 @@ val RainbowPalette = Palette(
     ),
 )
 
+/**
+ * 薄荷：纯白打底 + 高亮绿，走极简。
+ *
+ * 设计要点（相对米白的取舍）：
+ *  - 背景直接给纯白，不做光斑晕染（blobs 全部压到 0x0A 以下，几乎看不见，
+ *    只留一点点绿意防止大面积白屏刺眼）；
+ *  - 主色只用一个绿，饱和度拉高（#0AA66A），配合灰阶文字，接近 Linear / Notion 那种单色强调；
+ *  - teal（次强调）刻意换成蓝，不然青绿和主色绿混在一起分不清层级。
+ */
+val MintPalette = Palette(
+    key = "mint",
+    label = "薄荷",
+    isDark = false,
+    bg = Color(0xFFFFFFFF),
+    card = Color(0xFFFCFDFC),
+    cardHi = Color(0xFFF4FAF7),
+    gold = Color(0xFF0AA66A),
+    goldDim = Color(0xFF067A4E),
+    goldHi = Color(0xFF00D97E),
+    onGold = Color(0xFFFFFFFF),
+    text = Color(0xFF16211C),
+    textDim = Color(0xB316211C),
+    textFaint = Color(0x8A16211C),
+    orange = Color(0xFFE0700F),
+    teal = Color(0xFF2A7BD4),
+    danger = Color(0xFFD64545),
+    line = Color(0x0F16211C),
+    lineStrong = Color(0x1F16211C),
+    glassStrong = listOf(Color(0xFFFFFFFF), Color(0xFBFFFFFF), Color(0xF5FFFFFF)),
+    glassSoft = listOf(Color(0xFAFFFFFF), Color(0xF0FFFFFF)),
+    edge = Brush.verticalGradient(
+        listOf(Color(0xFFFFFFFF), Color(0x1F0AA66A), Color(0x0D16211C))
+    ),
+    edgeInner = Color(0x14FFFFFF),
+    shadowAmbient = Color(0x1444AA88),
+    shadowSpot = Color(0x1F0AA66A),
+    fill = Color(0x0D16211C),
+    trackFill = Color(0x1416211C),
+    trackEdge = Color(0x0A16211C),
+    ghostA = Color(0x1416211C),
+    ghostB = Color(0x0816211C),
+    ghostEdge = Color(0x1F16211C),
+    knobOn = Color(0xFFFFFFFF),
+    knobOff = Color(0xFFFFFFFF),
+    knobOffDim = Color(0x66FFFFFF),
+    sheen = Color(0x8CFFFFFF),
+    blobs = listOf(
+        blob(0.90f, -0.04f, 1.00f, 0x0A00C97AL),
+        blob(0.02f, 0.18f, 0.80f, 0x0A34E0A8L),
+        blob(-0.06f, 0.60f, 0.95f, 0x08B2F0D4L),
+        blob(0.94f, 0.88f, 0.88f, 0x08A8D8F0L),
+        blob(0.50f, 0.42f, 1.10f, 0x0AFFFFFFL),
+    ),
+)
+
 /** 深夜蓝：夜间 / 暗色模式的经典配色，也是 1.9.4 之前唯一的一套。 */
 val NightPalette = Palette(
     key = "night",
@@ -236,6 +291,7 @@ val NightPalette = Palette(
 /** 设置里的三个选项。SYSTEM 是策略，不是配色：亮色跟米白，暗色跟暗夜。 */
 enum class ThemeMode(val key: String, val label: String, val desc: String) {
     CREAM("cream", "米白", "暖白纸感，白天看着最舒服"),
+    MINT("mint", "薄荷", "纯白打底，高亮绿强调，极简单色"),
     RAINBOW("rainbow", "彩虹", "粉白底 + 五色晕染，边框走彩虹"),
     SYSTEM("system", "跟随系统", "白天米白、夜间暗夜，跟着系统开关切"),
     ;
@@ -247,6 +303,7 @@ enum class ThemeMode(val key: String, val label: String, val desc: String) {
 
 fun resolvePalette(mode: ThemeMode, systemDark: Boolean): Palette = when (mode) {
     ThemeMode.CREAM -> CreamPalette
+    ThemeMode.MINT -> MintPalette
     ThemeMode.RAINBOW -> RainbowPalette
     ThemeMode.SYSTEM -> if (systemDark) NightPalette else CreamPalette
 }

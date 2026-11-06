@@ -9,18 +9,13 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import com.haofan.xiaoxinxin.core.EarnRepo
 import com.haofan.xiaoxinxin.floatx.FloatService
-import com.haofan.xiaoxinxin.ui.HomeScreen
-import com.haofan.xiaoxinxin.ui.SettingsScreen
+import com.haofan.xiaoxinxin.ui.AppShell
 import com.haofan.xiaoxinxin.ui.ThemeMode
 import com.haofan.xiaoxinxin.ui.XC
 import com.haofan.xiaoxinxin.ui.XiaoxinxinTheme
@@ -37,9 +32,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         EarnRepo.init(this)
+        // App 启动也重排一次自动上班闹钟：用户改了上班时间但忘了重启 App 的情况也能对上
+        com.haofan.xiaoxinxin.core.AutoPunch.reschedule(this)
         // 内容延伸到系统栏下方由 Compose 的 systemBarsPadding 负责，
         // 这样背景光斑能一直铺到状态栏后面，和系统岛同色更协调。
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 底部导航要「透出」身后的内容，系统栏必须完全透明（默认的 scrim 会在玻璃上糊一条灰雾）
+        window.isNavigationBarContrastEnforced = false
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         // 先把配色定下来，避免首帧用错主题闪一下
         val night0 = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
@@ -64,7 +64,8 @@ class MainActivity : ComponentActivity() {
             }
 
             XiaoxinxinTheme {
-                var page by remember { mutableStateOf("home") }
+                // 主页「去设置」用自增计数通知外壳翻页：计数变了就代表用户又点了一次
+                var openSettingsTick by remember { mutableIntStateOf(0) }
 
                 LaunchedEffect(Unit) {
                     while (true) {
@@ -76,15 +77,12 @@ class MainActivity : ComponentActivity() {
                     FloatService.needed(this@MainActivity)
                 }
 
-                Box(Modifier.fillMaxSize().background(XC.bg)) {
-                    when (page) {
-                        "home" -> HomeScreen(
-                            onOpenSettings = { page = "settings" },
-                            onToggleFloat = { enableFloat(!state.floatEnabled) },
-                        )
-                        else -> SettingsScreen(onBack = { page = "home" })
-                    }
-                }
+                // 外壳需要一个「切到设置页」的信号；用计数自增表达，重复点击也能响应
+                AppShell(
+                    openSettingsTick = openSettingsTick,
+                    onOpenSettings = { openSettingsTick++ },
+                    onToggleFloat = { enableFloat(!state.floatEnabled) },
+                )
             }
         }
     }

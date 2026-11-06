@@ -23,6 +23,8 @@ data class EarnState(
     val overtimeSeconds: Double = 0.0,
 
     val autoClockOut: Boolean = true,
+    val autoClockIn: Boolean = false,     // 到点自动打卡上班（靠系统闹钟，App 不开也能触发）
+    val autoBoot: Boolean = false,        // 开机自启动：开机后恢复上面的闹钟
     val floatEnabled: Boolean = false,     // 自绘的顶部悬浮岛
     val islandEnabled: Boolean = false,    // 系统级实时通知（小米超级岛等）
     val floatX: Int = -1,                 // -1 表示未定位，首次贴右上

@@ -53,6 +53,8 @@ object EarnRepo {
         workedBeforeSession = p.getFloat("workedBeforeSession", 0f).toDouble(),
         overtimeSeconds = p.getFloat("overtimeSeconds", 0f).toDouble(),
         autoClockOut = p.getBoolean("autoClockOut", true),
+        autoClockIn = p.getBoolean("autoClockIn", false),
+        autoBoot = p.getBoolean("autoBoot", false),
         floatEnabled = p.getBoolean("floatEnabled", false),
         islandEnabled = p.getBoolean("islandEnabled", false),
         // 布局 v1 是「挂在状态栏下面的小胶囊」，坐标和 v2 的贴顶岛不通用；
@@ -81,6 +83,8 @@ object EarnRepo {
             .putFloat("workedBeforeSession", s.workedBeforeSession.toFloat())
             .putFloat("overtimeSeconds", s.overtimeSeconds.toFloat())
             .putBoolean("autoClockOut", s.autoClockOut)
+            .putBoolean("autoClockIn", s.autoClockIn)
+            .putBoolean("autoBoot", s.autoBoot)
             .putBoolean("floatEnabled", s.floatEnabled)
             .putBoolean("islandEnabled", s.islandEnabled)
             .putInt("floatX", s.floatX)
@@ -124,7 +128,7 @@ object EarnRepo {
 
     // ---------------- 打卡 ----------------
 
-    fun clockIn() {
+    fun clockIn(auto: Boolean = false) {
         val now = System.currentTimeMillis()
         val s = _state.value
         val ot = s.copy(clockInAt = now).overtimeNow(now)
@@ -132,10 +136,27 @@ object EarnRepo {
         update {
             it.copy(
                 clockInAt = now,
-                logText = if (ot) "$t 加班打卡，已过下班时间，按原费率继续计费"
+                logText = if (auto) "$t 已到上班时间，自动打卡上班，金额开始滚动"
+                else if (ot) "$t 加班打卡，已过下班时间，按原费率继续计费"
                 else "$t 打卡上班，金额开始滚动",
             )
         }
+    }
+
+    /** 闹钟到点自动打卡上班。只在闹钟里调用，不在 tick 里兜底 ——
+     *  用户 15 点才打开 App 就强行补打 9 点的卡，等于替他虚报了 6 小时工时。 */
+    fun autoClockInIfNeeded(): Boolean {
+        val now = System.currentTimeMillis()
+        val s = _state.value
+        if (!s.autoClockIn || s.working) return false
+        val end = s.scheduledEnd(now) ?: return false
+        val start = scheduledStart(nowLocal(now), s.workStart, s.workEnd) ?: return false
+        val nowL = nowLocal(now)
+        // now 落在 [班次开始, 计划下班) 才算「到点上班」；已过下班不补打
+        return if (!nowL.isBefore(start) && nowL.isBefore(end)) {
+            clockIn(auto = true)
+            true
+        } else false
     }
 
     fun clockOut(auto: Boolean = false) {
@@ -243,6 +264,8 @@ object EarnRepo {
     fun setWorkStart(v: String) = update { it.copy(workStart = v) }
     fun setWorkEnd(v: String) = update { it.copy(workEnd = v) }
     fun setAutoClockOut(v: Boolean) = update { it.copy(autoClockOut = v) }
+    fun setAutoClockIn(v: Boolean) = update { it.copy(autoClockIn = v) }
+    fun setAutoBoot(v: Boolean) = update { it.copy(autoBoot = v) }
     fun setBarSymbol(v: String) = update { it.copy(barSymbol = v.take(2)) }
 
     fun setFloatEnabled(v: Boolean) = update { it.copy(floatEnabled = v) }

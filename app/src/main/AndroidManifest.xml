@@ -10,6 +10,9 @@
     <!-- Android 16：把常驻通知提升为系统「实时更新」= 小米超级岛 / OPPO 流体云 / 原生 Live Updates -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 自动打卡上班：开机恢复闹钟 + 到点唤醒。未授予「闹钟和提醒」时自动降级为窗口闹钟 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -40,6 +43,15 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="持续显示当前工时进账金额的悬浮计时器" />
         </service>
+
+        <receiver
+            android:name=".core.AutoPunchReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

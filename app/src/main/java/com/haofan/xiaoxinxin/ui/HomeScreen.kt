@@ -8,9 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -51,169 +48,167 @@ fun HomeScreen(
     val working = s.working
     val overtime = s.overtimeNow(now)
 
-    LiquidBackground {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-        ) {
-            Spacer(Modifier.height(10.dp))
-            TopBar(onOpenSettings, onToggleFloat, s.floatEnabled)
-            Spacer(Modifier.height(16.dp))
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+    ) {
+        Spacer(Modifier.height(10.dp))
+        TopBar(onToggleFloat, s.floatEnabled)
+        Spacer(Modifier.height(16.dp))
 
-            // —— 主卡：今日到账 ——
-            GlassCard(Modifier.fillMaxWidth(), radius = 28, strong = true) {
-                Column(
-                    Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        "今日已到账",
-                        color = XC.textFaint,
-                        fontSize = 11.5.sp,
-                        letterSpacing = 1.6.sp,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        if (s.salary > 0) {
-                            Text(
-                                "¥",
-                                color = XC.goldDim,
-                                fontSize = 22.sp,
-                                fontWeight = W500,
-                                modifier = Modifier.padding(bottom = 9.dp, end = 2.dp),
-                            )
-                            Text(
-                                fmt(earned),
-                                style = TextStyle(
-                                    color = XC.gold,
-                                    fontSize = MoneyBig,
-                                    fontWeight = W600,
-                                    fontFamily = NumFont,
-                                    shadow = Shadow(
-                                        color = XC.gold.copy(alpha = if (XC.isDark) 0.38f else 0.16f),
-                                        offset = Offset.Zero,
-                                        blurRadius = 14f,
-                                    ),
-                                ),
-                            )
-                        } else {
-                            Text(
-                                "设置月薪后开始计费",
-                                color = XC.textDim,
-                                fontSize = 16.sp,
-                                fontWeight = W500,
-                                modifier = Modifier.padding(vertical = 16.dp),
-                            )
-                        }
-                    }
-
-                    if (overtime) {
-                        Spacer(Modifier.height(10.dp))
-                        Pill("加班中", XC.orange)
-                    }
-
-                    Spacer(Modifier.height(18.dp))
-                    GlassProgress(if (s.salary > 0) progress.toFloat() else 0f, s.barStyle)
-                    Spacer(Modifier.height(9.dp))
-                    Text(
-                        if (s.salary > 0)
-                            "今日进度 ${fmt(progress * 100, 1)}% · 距离全天还差 ¥${fmt((s.ratePerDay - earned).coerceAtLeast(0.0))}"
-                        else "还没有月薪，算不出你每秒值多少钱",
-                        color = XC.textFaint,
-                        fontSize = 11.5.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            // —— 三档费率 ——
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                RateTile("日薪", if (s.salary > 0) "¥${fmt(s.ratePerDay)}" else "—", Modifier.weight(1f))
-                RateTile("时薪", if (s.salary > 0) "¥${fmt(s.ratePerHour)}" else "—", Modifier.weight(1f))
-                RateTile("每秒", if (s.salary > 0) "¥${fmt(s.ratePerSec, 4)}" else "—", Modifier.weight(1f))
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // —— 打卡 ——
-            PunchButton(
-                working = working,
-                label = when {
-                    s.salary <= 0 -> "先设置月薪"
-                    working -> "打卡下班"
-                    else -> "打卡上班"
-                },
-                workedText = if (working) {
-                    val m = s.workedMinutes(now)
-                    "已工作 ${m / 60} 小时 ${m % 60} 分"
-                } else null,
-                onClick = {
-                    when {
-                        s.salary <= 0 -> onOpenSettings()
-                        working -> EarnRepo.clockOut()
-                        else -> EarnRepo.clockIn()
-                    }
-                },
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                MonthTile("本月进账", "¥${fmt(s.monthEarned(now))}", Modifier.weight(1f))
-                MonthTile(
-                    "本月加班",
-                    run {
-                        val m = (s.monthOTSeconds(now) / 60).toInt()
-                        if (m <= 0) "0 分" else "${m / 60} 时 ${m % 60} 分"
-                    },
-                    Modifier.weight(1f),
-                )
-            }
-
-            if (s.logText.isNotEmpty()) {
-                Spacer(Modifier.height(18.dp))
+        // —— 主卡：今日到账 ——
+        GlassCard(Modifier.fillMaxWidth(), radius = 28, strong = true) {
+            Column(
+                Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
-                    s.logText,
+                    "今日已到账",
                     color = XC.textFaint,
                     fontSize = 11.5.sp,
-                    lineHeight = 17.sp,
+                    letterSpacing = 1.6.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    if (s.salary > 0) {
+                        Text(
+                            "¥",
+                            color = XC.goldDim,
+                            fontSize = 22.sp,
+                            fontWeight = W500,
+                            modifier = Modifier.padding(bottom = 9.dp, end = 2.dp),
+                        )
+                        Text(
+                            fmt(earned),
+                            style = TextStyle(
+                                color = XC.gold,
+                                fontSize = MoneyBig,
+                                fontWeight = W600,
+                                fontFamily = NumFont,
+                                shadow = Shadow(
+                                    color = XC.gold.copy(alpha = if (XC.isDark) 0.38f else 0.16f),
+                                    offset = Offset.Zero,
+                                    blurRadius = 14f,
+                                ),
+                            ),
+                        )
+                    } else {
+                        Text(
+                            "设置月薪后开始计费",
+                            color = XC.textDim,
+                            fontSize = 16.sp,
+                            fontWeight = W500,
+                            modifier = Modifier.padding(vertical = 16.dp),
+                        )
+                    }
+                }
+
+                if (overtime) {
+                    Spacer(Modifier.height(10.dp))
+                    Pill("加班中", XC.orange)
+                }
+
+                Spacer(Modifier.height(18.dp))
+                GlassProgress(if (s.salary > 0) progress.toFloat() else 0f, s.barStyle)
+                Spacer(Modifier.height(9.dp))
+                Text(
+                    if (s.salary > 0)
+                        "今日进度 ${fmt(progress * 100, 1)}% · 距离全天还差 ¥${fmt((s.ratePerDay - earned).coerceAtLeast(0.0))}"
+                    else "还没有月薪，算不出你每秒值多少钱",
+                    color = XC.textFaint,
+                    fontSize = 11.5.sp,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                 )
             }
-
-            if (s.salary <= 0) {
-                Spacer(Modifier.height(20.dp))
-                SetupCard(onOpen = onOpenSettings)
-            } else if (!s.floatEnabled) {
-                Spacer(Modifier.height(20.dp))
-                FloatHintCard(onEnable = onToggleFloat)
-            } else {
-                Spacer(Modifier.height(18.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(XC.teal),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text("顶部悬浮岛已开启 · 单击展开、双击迷你、长按隐藏", color = XC.textFaint, fontSize = 11.sp)
-                }
-            }
-
-            Spacer(Modifier.height(30.dp))
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        // —— 三档费率 ——
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            RateTile("日薪", if (s.salary > 0) "¥${fmt(s.ratePerDay)}" else "—", Modifier.weight(1f))
+            RateTile("时薪", if (s.salary > 0) "¥${fmt(s.ratePerHour)}" else "—", Modifier.weight(1f))
+            RateTile("每秒", if (s.salary > 0) "¥${fmt(s.ratePerSec, 4)}" else "—", Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // —— 打卡 ——
+        PunchButton(
+            working = working,
+            label = when {
+                s.salary <= 0 -> "先设置月薪"
+                working -> "打卡下班"
+                else -> "打卡上班"
+            },
+            workedText = if (working) {
+                val m = s.workedMinutes(now)
+                "已工作 ${m / 60} 小时 ${m % 60} 分"
+            } else null,
+            onClick = {
+                when {
+                    s.salary <= 0 -> onOpenSettings()
+                    working -> EarnRepo.clockOut()
+                    else -> EarnRepo.clockIn()
+                }
+            },
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            MonthTile("本月进账", "¥${fmt(s.monthEarned(now))}", Modifier.weight(1f))
+            MonthTile(
+                "本月加班",
+                run {
+                    val m = (s.monthOTSeconds(now) / 60).toInt()
+                    if (m <= 0) "0 分" else "${m / 60} 时 ${m % 60} 分"
+                },
+                Modifier.weight(1f),
+            )
+        }
+
+        if (s.logText.isNotEmpty()) {
+            Spacer(Modifier.height(18.dp))
+            Text(
+                s.logText,
+                color = XC.textFaint,
+                fontSize = 11.5.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        if (s.salary <= 0) {
+            Spacer(Modifier.height(20.dp))
+            SetupCard(onOpen = onOpenSettings)
+        } else if (!s.floatEnabled) {
+            Spacer(Modifier.height(20.dp))
+            FloatHintCard(onEnable = onToggleFloat)
+        } else {
+            Spacer(Modifier.height(18.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(XC.teal),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("顶部悬浮岛已开启 · 单击展开、双击迷你、长按隐藏", color = XC.textFaint, fontSize = 11.sp)
+            }
+        }
+
+        Spacer(Modifier.height(104.dp))
     }
 }
 
@@ -292,7 +287,7 @@ private fun FloatHintCard(onEnable: () -> Unit) {
 }
 
 @Composable
-private fun TopBar(onOpenSettings: () -> Unit, onToggleFloat: () -> Unit, floatOn: Boolean) {
+private fun TopBar(onToggleFloat: () -> Unit, floatOn: Boolean) {
     GlassCard(Modifier.fillMaxWidth(), radius = 40) {
         Row(
             Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
@@ -311,19 +306,10 @@ private fun TopBar(onOpenSettings: () -> Unit, onToggleFloat: () -> Unit, floatO
             Spacer(Modifier.width(9.dp))
             Text("小薪薪", color = XC.text, fontSize = 14.5.sp, fontWeight = W500)
             Spacer(Modifier.width(6.dp))
-            Text("v1.9.5", color = XC.textFaint, fontSize = 10.5.sp)
+            Text("v1.9.6", color = XC.textFaint, fontSize = 10.5.sp)
             Spacer(Modifier.weight(1f))
             RoundGlassButton(active = floatOn, onClick = onToggleFloat) {
                 Text("浮", color = if (floatOn) XC.gold else XC.textDim, fontSize = 13.sp, fontWeight = W500)
-            }
-            Spacer(Modifier.width(7.dp))
-            RoundGlassButton(active = false, onClick = onOpenSettings) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = "设置",
-                    tint = XC.textDim,
-                    modifier = Modifier.size(16.dp),
-                )
             }
         }
     }
