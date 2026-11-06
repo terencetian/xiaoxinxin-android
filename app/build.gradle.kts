@@ -15,8 +15,8 @@ android {
         minSdk = 26
         // targetSdk 暂留 35：API 36 强制 edge-to-edge，先把岛跑通再单独做视觉回归
         targetSdk = 35
-        versionCode = 33
-        versionName = "1.9.8"
+        versionCode = 34
+        versionName = "1.9.9"
         resourceConfigurations += listOf("zh", "en")
     }
 
@@ -42,10 +42,9 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
-        debug {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
-        }
+        // 尝鲜版直接以 debug 构建分发（debuggable + debug 签名），但包名和版本号不再挂 .debug 后缀，
+        // 这样从尝鲜版走到正式版时包名不变、能原地升级，不用卸载重装。
+        // 正式发版前只需补 keystore.properties，跑 assembleRelease 即可。
     }
 
     compileOptions {
@@ -59,6 +58,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true   // 设置页版本号读 BuildConfig.VERSION_NAME，避免手抄版本号写歪
     }
 
     packaging {

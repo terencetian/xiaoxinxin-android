@@ -2,7 +2,8 @@
 
 > ⚠️ **这是尝鲜版（beta）**：功能跑得通，但没上架应用商店，也没做过全机型覆盖测试。遇到问题欢迎提 issue，别当正式版用。
 >
-> 📦 当前 **v1.9.8**（versionCode 33）：新增到点自动上班、统计页、玻璃底栏三 Tab。
+> 📦 当前 **v1.9.9**（versionCode 34）：包名改为 `com.haofan.xiaoxinxin`（去掉 `.debug` 后缀），从这一版起包名固定，以后转正式版可原地升级。
+> 装过 v1.9.8 及更早版本的，因为包名变了**需要先卸载旧的**，桌面会短暂出现两个图标。
 
 Mac 版「小薪薪」的手机版。填月薪、打卡，屏幕上实时显示今天已经挣了多少钱。
 
@@ -84,10 +85,10 @@ Mac 版「小薪薪」的手机版。填月薪、打卡，屏幕上实时显示�
 
 ## 自己编
 
-需要 JDK 17 与 Android SDK（compileSdk 35、build-tools 35.0.0）。
+需要 JDK 17 与 Android SDK（compileSdk 36、build-tools 35.0.0）。
 
 ```bash
-# debug 包
+# debug 包（尝鲜版就是它：debug 构建，但包名是正式包名 com.haofan.xiaoxinxin）
 ./gradlew assembleDebug
 
 # 正式签名包（需 keystore.properties）
@@ -115,7 +116,7 @@ keyPassword=****
 ## 归档
 
 ```bash
-./tools/archive_apk.sh 1.9.8 --rebuild
+./tools/archive_apk.sh 1.9.9 --rebuild
 ```
 
 会校验 APK 内的 versionName 与传入版本一致（不符直接中止），复制到

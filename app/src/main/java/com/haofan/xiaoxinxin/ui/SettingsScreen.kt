@@ -1,5 +1,6 @@
 package com.haofan.xiaoxinxin.ui
 
+import com.haofan.xiaoxinxin.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,7 +72,7 @@ fun SettingsScreen() {
         Row(verticalAlignment = Alignment.Bottom) {
             Text("设置", color = XC.text, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, letterSpacing = -0.5.sp)
             Spacer(Modifier.weight(1f))
-            Text("v1.9.8", color = XC.textFaint, fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
+            Text("v${BuildConfig.VERSION_NAME}", color = XC.textFaint, fontSize = 11.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
 
         Spacer(Modifier.height(18.dp))
