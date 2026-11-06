@@ -1,5 +1,6 @@
 package com.haofan.xiaoxinxin.ui
 
+import com.haofan.xiaoxinxin.BuildConfig
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -306,7 +307,7 @@ private fun TopBar(onToggleFloat: () -> Unit, floatOn: Boolean) {
             Spacer(Modifier.width(9.dp))
             Text("小薪薪", color = XC.text, fontSize = 14.5.sp, fontWeight = W500)
             Spacer(Modifier.width(6.dp))
-            Text("v1.9.6", color = XC.textFaint, fontSize = 10.5.sp)
+            Text("v${BuildConfig.VERSION_NAME}", color = XC.textFaint, fontSize = 10.5.sp)
             Spacer(Modifier.weight(1f))
             RoundGlassButton(active = floatOn, onClick = onToggleFloat) {
                 Text("浮", color = if (floatOn) XC.gold else XC.textDim, fontSize = 13.sp, fontWeight = W500)
