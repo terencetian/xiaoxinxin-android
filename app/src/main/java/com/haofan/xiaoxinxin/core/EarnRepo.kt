@@ -5,7 +5,9 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
 import org.json.JSONObject
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -30,6 +32,8 @@ object EarnRepo {
         if (prefs != null) return
         val p = ctx.applicationContext.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         prefs = p
+        // 先跑一次性主题迁移，再读存档 —— 否则读到的还是旧主题
+        migrateDefaultThemeToSky(p)
         var s = load(p)
         if (s.dayKey.isEmpty()) {
             s = s.copy(dayKey = todayKey())
@@ -52,6 +56,8 @@ object EarnRepo {
         baseEarned = p.getFloat("baseEarned", 0f).toDouble(),
         workedBeforeSession = p.getFloat("workedBeforeSession", 0f).toDouble(),
         overtimeSeconds = p.getFloat("overtimeSeconds", 0f).toDouble(),
+        customWeekdays = decodeInts(p.getString("customWeekdays", "") ?: "").ifEmpty { setOf(1, 2, 3, 4, 5) },
+        useLegalHolidays = p.getBoolean("useLegalHolidays", true),
         autoClockOut = p.getBoolean("autoClockOut", true),
         autoClockIn = p.getBoolean("autoClockIn", false),
         autoBoot = p.getBoolean("autoBoot", false),
@@ -62,14 +68,82 @@ object EarnRepo {
         floatX = if (p.getInt("floatLayoutVer", 1) >= FLOAT_LAYOUT_VERSION) p.getInt("floatX", -1) else -1,
         floatY = if (p.getInt("floatLayoutVer", 1) >= FLOAT_LAYOUT_VERSION) p.getInt("floatY", -1) else -1,
         floatMini = p.getBoolean("floatMini", false),
-        themeMode = p.getString("themeMode", "cream") ?: "cream",
-        barStyle = p.getString("barStyle", "gold") ?: "gold",
+        themeId = migrateTheme(p.getString("themeId", null), p.getString("themeMode", null)),
+        themeAlpha = p.getFloat("themeAlpha", 1f).toDouble(),
+        themeAccent = p.getString("themeAccent", "") ?: "",
+        themeBg = p.getString("themeBg", "") ?: "",
+        themeText = p.getString("themeText", "") ?: "",
+        progressMetric = p.getString("progressMetric", ProgressMetric.TODAY_SALARY.key)
+            ?: ProgressMetric.TODAY_SALARY.key,
+        hiddenHomeCards = decodeStrings(p.getString("hiddenHomeCards", "") ?: ""),
+        hiddenMoneyChips = decodeStrings(p.getString("hiddenMoneyChips", "") ?: ""),
+        hiddenCountdownChips = decodeStrings(p.getString("hiddenCountdownChips", "") ?: ""),
+        hiddenRecordChips = decodeStrings(p.getString("hiddenRecordChips", "") ?: ""),
+        hiddenButtons = decodeStrings(p.getString("hiddenButtons", "") ?: ""),
+        statusBarKinds = decodeStrings(p.getString("statusBarKinds", "") ?: "")
+            .ifEmpty { setOf(StatusBarKind.MONEY_TODAY.key) },
+        statusBarRotate = p.getBoolean("statusBarRotate", false),
+        statusBarRotateSeconds = p.getInt("statusBarRotateSeconds", 5),
         barSymbol = p.getString("barSymbol", "") ?: "",
+        privacyEnabled = p.getBoolean("privacyEnabled", false),
+        privacyUnlockedUntil = p.getLong("privacyUnlockedUntil", 0L),
+        pinSalt = p.getString("pinSalt", "") ?: "",
+        pinHash = p.getString("pinHash", "") ?: "",
+        countdowns = decodeCountdowns(p.getString("countdowns", "") ?: ""),
+        activeCountdownId = p.getString("activeCountdownId", "") ?: "",
+        recordDays = decodeRecordDays(p.getString("recordDays", "") ?: ""),
+        activeRecordDayId = p.getString("activeRecordDayId", "") ?: "",
         dayLog = decodeDayLog(p.getString("dayLog", "{}") ?: "{}"),
         dayKey = p.getString("dayKey", "") ?: "",
+        onboardingDone = p.getBoolean("onboardingDone", false),
         deviceId = p.getString("deviceId", "")?.takeIf { it.isNotEmpty() }
             ?: UUID.randomUUID().toString().also { p.edit().putString("deviceId", it).apply() },
     )
+
+    /** 1.x 的 themeMode（cream / rainbow / mint / system）→ 2.0 的四套主题 */
+    private fun migrateTheme(themeId: String?, themeMode: String?): String {
+        themeId?.takeIf { it.isNotEmpty() }?.let { return it }
+        return when (themeMode) {
+            "mint" -> "mint"
+            else -> "sky"
+        }
+    }
+
+    /**
+     * 2.0 默认主题迁移 —— 对齐 macOS 2.3 的 `themeDefaultSky23`。
+     *
+     * 1.x 存档里可能是 cream / rainbow / mint / system，2.0 早期还可能是 Liquid Glass。
+     * macOS 从 2.3 起把默认主题从 Liquid Glass 换成「白 + 天蓝」（最中性），但只迁移
+     * **没动过配色**的旧存档：动过色卡或调过透明度的，一律保留用户自己的配色，绝不覆盖。
+     *
+     * 整段只跑一次，跑完就打标记，避免把用户后来手动选的薄荷绿又拉回天蓝。
+     */
+    private fun migrateDefaultThemeToSky(p: SharedPreferences) {
+        if (p.getBoolean("themeSkyDefault", false)) return
+        p.edit().putBoolean("themeSkyDefault", true).apply()
+
+        // 已经是天蓝，没什么可迁的
+        val cur = migrateTheme(p.getString("themeId", null), p.getString("themeMode", null))
+        if (cur == "sky") return
+
+        // 动过色卡 → 保留用户配色
+        val customBg = p.getString("themeBg", "") ?: ""
+        val customText = p.getString("themeText", "") ?: ""
+        val customAccent = p.getString("themeAccent", "") ?: ""
+        if (customBg.isNotEmpty() || customText.isNotEmpty() || customAccent.isNotEmpty()) return
+
+        // 动过透明度 → 也保留。1.0 是「没调过」的默认值，0.58 是 Liquid Glass 预设值，
+        // 两个都算原样，其余视为用户手动调过。
+        val alpha = p.getFloat("themeAlpha", 1f).toDouble()
+        val alphaUntouched = alpha >= 0.98 || kotlin.math.abs(alpha - 0.58) < 0.02
+        if (!alphaUntouched) return
+
+        p.edit()
+            .putString("themeId", "sky")
+            .putString("themeMode", "sky")
+            .remove("themeAlpha")
+            .apply()
+    }
 
     private fun save(p: SharedPreferences, s: EarnState) {
         p.edit()
@@ -82,6 +156,8 @@ object EarnRepo {
             .putFloat("baseEarned", s.baseEarned.toFloat())
             .putFloat("workedBeforeSession", s.workedBeforeSession.toFloat())
             .putFloat("overtimeSeconds", s.overtimeSeconds.toFloat())
+            .putString("customWeekdays", encodeInts(s.customWeekdays))
+            .putBoolean("useLegalHolidays", s.useLegalHolidays)
             .putBoolean("autoClockOut", s.autoClockOut)
             .putBoolean("autoClockIn", s.autoClockIn)
             .putBoolean("autoBoot", s.autoBoot)
@@ -91,14 +167,140 @@ object EarnRepo {
             .putInt("floatY", s.floatY)
             .putInt("floatLayoutVer", FLOAT_LAYOUT_VERSION)
             .putBoolean("floatMini", s.floatMini)
-            .putString("themeMode", s.themeMode)
-            .putString("barStyle", s.barStyle)
+            .putString("themeId", s.themeId)
+            .putFloat("themeAlpha", s.themeAlpha.toFloat())
+            .putString("themeAccent", s.themeAccent)
+            .putString("themeBg", s.themeBg)
+            .putString("themeText", s.themeText)
+            .putString("progressMetric", s.progressMetric)
+            .putString("hiddenHomeCards", encodeStrings(s.hiddenHomeCards))
+            .putString("hiddenMoneyChips", encodeStrings(s.hiddenMoneyChips))
+            .putString("hiddenCountdownChips", encodeStrings(s.hiddenCountdownChips))
+            .putString("hiddenRecordChips", encodeStrings(s.hiddenRecordChips))
+            .putString("hiddenButtons", encodeStrings(s.hiddenButtons))
+            .putString("statusBarKinds", encodeStrings(s.statusBarKinds))
+            .putBoolean("statusBarRotate", s.statusBarRotate)
+            .putInt("statusBarRotateSeconds", s.statusBarRotateSeconds)
             .putString("barSymbol", s.barSymbol)
+            .putBoolean("privacyEnabled", s.privacyEnabled)
+            .putLong("privacyUnlockedUntil", s.privacyUnlockedUntil)
+            .putString("pinSalt", s.pinSalt)
+            .putString("pinHash", s.pinHash)
+            .putString("countdowns", encodeCountdowns(s.countdowns))
+            .putString("activeCountdownId", s.activeCountdownId)
+            .putString("recordDays", encodeRecordDays(s.recordDays))
+            .putString("activeRecordDayId", s.activeRecordDayId)
             .putString("dayLog", encodeDayLog(s.dayLog))
             .putString("dayKey", s.dayKey)
+            .putBoolean("onboardingDone", s.onboardingDone)
             .putString("deviceId", s.deviceId)
             .apply()
     }
+
+    // ---------------- JSON 编解码 ----------------
+
+    private fun encodeStrings(v: Set<String>): String {
+        val a = JSONArray()
+        v.forEach { a.put(it) }
+        return a.toString()
+    }
+
+    private fun decodeStrings(raw: String): Set<String> {
+        if (raw.isEmpty()) return emptySet()
+        return try {
+            val a = JSONArray(raw)
+            buildSet { for (i in 0 until a.length()) add(a.getString(i)) }
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    private fun encodeInts(v: Set<Int>): String = v.sorted().joinToString(",")
+
+    private fun decodeInts(raw: String): Set<Int> =
+        raw.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+
+    private fun encodeCountdowns(list: List<CountdownItem>): String {
+        val a = JSONArray()
+        list.forEach { c ->
+            a.put(
+                JSONObject()
+                    .put("id", c.id).put("name", c.name)
+                    .put("m", c.month).put("d", c.day)
+                    .put("y", c.year ?: JSONObject.NULL)
+                    .put("mode", c.mode).put("created", c.createdKey)
+                    .put("sy", c.startYear ?: JSONObject.NULL)
+                    .put("sm", c.startMonth ?: JSONObject.NULL)
+                    .put("sd", c.startDay ?: JSONObject.NULL)
+                    .put("th", c.targetHour ?: JSONObject.NULL)
+                    .put("tm", c.targetMinute ?: JSONObject.NULL)
+            )
+        }
+        return a.toString()
+    }
+
+    private fun decodeCountdowns(raw: String): List<CountdownItem> {
+        if (raw.isEmpty()) return emptyList()
+        return try {
+            val a = JSONArray(raw)
+            (0 until a.length()).mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                CountdownItem(
+                    id = o.optString("id").ifEmpty { UUID.randomUUID().toString() },
+                    name = o.optString("name"),
+                    month = o.optInt("m", 1),
+                    day = o.optInt("d", 1),
+                    year = o.optIntOrNull("y"),
+                    mode = o.optString("mode", "days"),
+                    createdKey = o.optString("created", ""),
+                    startYear = o.optIntOrNull("sy"),
+                    startMonth = o.optIntOrNull("sm"),
+                    startDay = o.optIntOrNull("sd"),
+                    targetHour = o.optIntOrNull("th"),
+                    targetMinute = o.optIntOrNull("tm"),
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun encodeRecordDays(list: List<RecordDayItem>): String {
+        val a = JSONArray()
+        list.forEach { r ->
+            a.put(
+                JSONObject()
+                    .put("id", r.id).put("name", r.name)
+                    .put("y", r.year).put("m", r.month).put("d", r.day)
+                    .put("target", r.targetDays).put("mode", r.mode)
+            )
+        }
+        return a.toString()
+    }
+
+    private fun decodeRecordDays(raw: String): List<RecordDayItem> {
+        if (raw.isEmpty()) return emptyList()
+        return try {
+            val a = JSONArray(raw)
+            (0 until a.length()).mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                RecordDayItem(
+                    id = o.optString("id").ifEmpty { UUID.randomUUID().toString() },
+                    name = o.optString("name"),
+                    year = o.optInt("y", LocalDate.now().year),
+                    month = o.optInt("m", 1),
+                    day = o.optInt("d", 1),
+                    targetDays = o.optInt("target", 0),
+                    mode = o.optString("mode", "days"),
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun JSONObject.optIntOrNull(key: String): Int? =
+        if (isNull(key)) null else optInt(key, Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
 
     private fun encodeDayLog(m: Map<String, DayLog>): String {
         val o = JSONObject()
@@ -131,7 +333,7 @@ object EarnRepo {
     fun clockIn(auto: Boolean = false) {
         val now = System.currentTimeMillis()
         val s = _state.value
-        val ot = s.copy(clockInAt = now).overtimeNow(now)
+        val ot = s.overtimeNow(now)
         val t = timeStr(nowLocal(now))
         update {
             it.copy(
@@ -150,7 +352,7 @@ object EarnRepo {
         val s = _state.value
         if (!s.autoClockIn || s.working) return false
         val end = s.scheduledEnd(now) ?: return false
-        val start = scheduledStart(nowLocal(now), s.workStart, s.workEnd) ?: return false
+        val start = s.scheduledStart(now) ?: return false
         val nowL = nowLocal(now)
         // now 落在 [班次开始, 计划下班) 才算「到点上班」；已过下班不补打
         return if (!nowL.isBefore(start) && nowL.isBefore(end)) {
@@ -190,20 +392,18 @@ object EarnRepo {
             // 计费中：保留当前段起点，只把「之前已工作」部分调整到目标值
             val running = ((now - s.clockInAt).coerceAtLeast(0L)) / 1000.0
             val before = (target - running).coerceAtLeast(0.0)
-            val earned = before * s.ratePerSec
             update {
                 it.copy(
                     workedBeforeSession = before,
-                    baseEarned = earned,
+                    baseEarned = before * s.ratePerSec,
                     logText = "已校正为 ${fmt(hours, 2)} 小时，金额同步对齐",
                 )
             }
         } else {
-            val earned = target * s.ratePerSec
             update {
                 it.copy(
                     workedBeforeSession = target,
-                    baseEarned = earned,
+                    baseEarned = target * s.ratePerSec,
                     logText = "已校正为 ${fmt(hours, 2)} 小时，金额同步对齐",
                 )
             }
@@ -256,24 +456,229 @@ object EarnRepo {
         autoClockOutIfNeeded()
     }
 
-    // ---------------- 设置项 ----------------
+    // ---------------- 设置项：计薪 ----------------
 
     fun setSalary(v: String) = update { it.copy(salaryText = v.filter { c -> c.isDigit() || c == '.' }) }
     fun setWorkDays(v: String) = update { it.copy(workDaysText = v.filter { c -> c.isDigit() }.take(2)) }
     fun setBreakMin(v: String) = update { it.copy(breakMin = v.filter { c -> c.isDigit() }.take(3)) }
     fun setWorkStart(v: String) = update { it.copy(workStart = v) }
     fun setWorkEnd(v: String) = update { it.copy(workEnd = v) }
+
+    fun toggleWeekday(dow: Int) = update {
+        val next = if (dow in it.customWeekdays) it.customWeekdays - dow else it.customWeekdays + dow
+        it.copy(customWeekdays = next.ifEmpty { it.customWeekdays })
+    }
+
+    fun setUseLegalHolidays(v: Boolean) = update { it.copy(useLegalHolidays = v) }
+
+    fun resetWeekdays() = update { it.copy(customWeekdays = setOf(1, 2, 3, 4, 5), useLegalHolidays = true) }
+
+    // ---------------- 设置项：自动化 ----------------
+
     fun setAutoClockOut(v: Boolean) = update { it.copy(autoClockOut = v) }
     fun setAutoClockIn(v: Boolean) = update { it.copy(autoClockIn = v) }
     fun setAutoBoot(v: Boolean) = update { it.copy(autoBoot = v) }
-    fun setBarSymbol(v: String) = update { it.copy(barSymbol = v.take(2)) }
+
+    // ---------------- 设置项：悬浮岛 / 通知 ----------------
 
     fun setFloatEnabled(v: Boolean) = update { it.copy(floatEnabled = v) }
     fun setIslandEnabled(v: Boolean) = update { it.copy(islandEnabled = v) }
     fun setFloatPosition(x: Int, y: Int) = update { it.copy(floatX = x, floatY = y) }
     fun setFloatMini(v: Boolean) = update { it.copy(floatMini = v) }
-    fun setThemeMode(v: String) = update { it.copy(themeMode = v) }
-    fun setBarStyle(v: String) = update { it.copy(barStyle = v) }
+    fun setBarSymbol(v: String) = update { it.copy(barSymbol = v.take(2)) }
+
+    fun toggleBarKind(kind: StatusBarKind) = update {
+        val cur = it.statusBarKinds
+        val next = if (kind.key in cur) {
+            // 至少保留一项，否则通知栏就空了
+            if (cur.size <= 1) cur else cur - kind.key
+        } else cur + kind.key
+        it.copy(statusBarKinds = next)
+    }
+
+    fun setStatusBarRotate(v: Boolean) = update { it.copy(statusBarRotate = v) }
+    fun setStatusBarRotateSeconds(v: Int) = update { it.copy(statusBarRotateSeconds = v.coerceIn(2, 60)) }
+
+    // ---------------- 设置项：主题 ----------------
+
+    fun setTheme(id: String) = update { it.copy(themeId = id) }
+    fun setThemeAlpha(v: Double) = update { it.copy(themeAlpha = v.coerceIn(0.15, 1.0)) }
+    fun setThemeAccent(rgb: String) = update { it.copy(themeAccent = rgb) }
+    fun setThemeBg(rgb: String) = update { it.copy(themeBg = rgb) }
+    fun setThemeText(rgb: String) = update { it.copy(themeText = rgb) }
+
+    // ---------------- 设置项：口径与显隐 ----------------
+
+    fun setProgressMetric(key: String) = update { it.copy(progressMetric = key) }
+
+    /** 首页三张卡至少留一张 */
+    fun setHomeCardVisible(card: String, visible: Boolean) = update {
+        val next = if (visible) it.hiddenHomeCards - card else it.hiddenHomeCards + card
+        val visibleCount = 3 - next.size
+        if (visibleCount < 1) it else it.copy(hiddenHomeCards = next)
+    }
+
+    fun setChipVisible(mode: DetailMode, chip: String, visible: Boolean) = update {
+        when (mode) {
+            DetailMode.SALARY -> it.copy(
+                hiddenMoneyChips = if (visible) it.hiddenMoneyChips - chip else it.hiddenMoneyChips + chip
+            )
+            DetailMode.COUNTDOWN -> it.copy(
+                hiddenCountdownChips = if (visible) it.hiddenCountdownChips - chip else it.hiddenCountdownChips + chip
+            )
+            DetailMode.RECORD_DAY -> it.copy(
+                hiddenRecordChips = if (visible) it.hiddenRecordChips - chip else it.hiddenRecordChips + chip
+            )
+        }
+    }
+
+    fun hideAllChips(mode: DetailMode, hide: Boolean) = update {
+        val all = when (mode) {
+            DetailMode.SALARY -> MoneyChip.entries.map { it.key }.toSet()
+            DetailMode.COUNTDOWN -> CountdownChip.entries.map { it.key }.toSet()
+            DetailMode.RECORD_DAY -> RecordDayChip.entries.map { it.key }.toSet()
+        }
+        when (mode) {
+            DetailMode.SALARY -> it.copy(hiddenMoneyChips = if (hide) all else emptySet())
+            DetailMode.COUNTDOWN -> it.copy(hiddenCountdownChips = if (hide) all else emptySet())
+            DetailMode.RECORD_DAY -> it.copy(hiddenRecordChips = if (hide) all else emptySet())
+        }
+    }
+
+    fun setButtonVisible(id: String, visible: Boolean) = update {
+        it.copy(hiddenButtons = if (visible) it.hiddenButtons - id else it.hiddenButtons + id)
+    }
+
+    // ---------------- 隐私模式 ----------------
+
+    private fun digest(pin: String, salt: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest("$salt::$pin".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+    fun verifyPin(pin: String): Boolean {
+        val s = _state.value
+        if (!s.hasPin) return true
+        return digest(pin, s.pinSalt) == s.pinHash
+    }
+
+    /** 开启隐私模式：必须给一个 4 位数字密码。返回错误提示，null = 成功。 */
+    fun enablePrivacy(pin: String): String? {
+        if (pin.length != 4 || pin.any { !it.isDigit() }) return "密码必须是 4 位数字"
+        val salt = UUID.randomUUID().toString()
+        update {
+            it.copy(
+                pinSalt = salt,
+                pinHash = digest(pin, salt),
+                privacyEnabled = true,
+                privacyUnlockedUntil = 0L,
+                logText = "隐私模式已开启：工资数字改为百分比进度",
+            )
+        }
+        return null
+    }
+
+    fun disablePrivacy() = update {
+        it.copy(
+            privacyEnabled = false,
+            privacyUnlockedUntil = 0L,
+            logText = "隐私模式已关闭，金额恢复显示",
+        )
+    }
+
+    /** 已有 PIN 时直接开启隐私模式（不重设密码）。 */
+    fun enablePrivacyWithExistingPin() = update {
+        it.copy(
+            privacyEnabled = true,
+            privacyUnlockedUntil = 0L,
+            logText = "隐私模式已开启：工资数字改为百分比进度",
+        )
+    }
+
+    /** 临时看一眼真实数字（默认 60 秒后自动恢复隐私展示） */
+    fun unlockTemporarily(seconds: Long = 60) = update {
+        it.copy(privacyUnlockedUntil = System.currentTimeMillis() + seconds * 1000)
+    }
+
+    fun relock() = update { it.copy(privacyUnlockedUntil = 0L) }
+
+    /** 修改 4 位密码：先校验旧密码，再重算哈希（沿用原 salt）。返回错误提示，null = 成功。 */
+    fun changePin(oldPin: String, newPin: String): String? {
+        val s = _state.value
+        if (!s.hasPin) return "当前没有设置密码"
+        if (digest(oldPin, s.pinSalt) != s.pinHash) return "原密码不正确"
+        if (newPin.length != 4 || newPin.any { !it.isDigit() }) return "新密码必须是 4 位数字"
+        update {
+            it.copy(
+                pinHash = digest(newPin, s.pinSalt),
+                privacyUnlockedUntil = 0L,
+                logText = "隐私密码已修改",
+            )
+        }
+        return null
+    }
+
+    fun completeOnboarding() = update { it.copy(onboardingDone = true) }
+
+    // ---------------- Your Days：倒计时 ----------------
+
+    /** 新增 / 修改倒计时。返回错误提示，null = 成功。 */
+    fun upsertCountdown(item: CountdownItem, isNew: Boolean): String? {
+        if (!item.valid) return "月份 1–12、日期 1–31，年份留空表示每年重复"
+        countdownRangeError(item)?.let { return it }
+        val s = _state.value
+        if (item.name.isBlank()) return "给它起个名字吧"
+        val list = if (isNew) s.countdowns + item
+        else s.countdowns.map { if (it.id == item.id) item else it }
+        update {
+            it.copy(
+                countdowns = list,
+                activeCountdownId = if (isNew || it.activeCountdownId.isEmpty()) item.id else it.activeCountdownId,
+                logText = if (isNew) "已新增倒计时「${item.name}」" else "已更新「${item.name}」",
+            )
+        }
+        return null
+    }
+
+    fun deleteCountdown(id: String) = update {
+        val list = it.countdowns.filterNot { c -> c.id == id }
+        it.copy(
+            countdowns = list,
+            activeCountdownId = if (it.activeCountdownId == id) (list.firstOrNull()?.id ?: "") else it.activeCountdownId,
+            logText = "已删除 1 个倒计时",
+        )
+    }
+
+    fun setActiveCountdown(id: String) = update { it.copy(activeCountdownId = id) }
+
+    // ---------------- Your Days：纪念日 ----------------
+
+    fun upsertRecordDay(item: RecordDayItem, isNew: Boolean): String? {
+        if (!item.valid) return "起始日期不合法（年份 1970–2100）"
+        if (item.name.isBlank()) return "给它起个名字吧"
+        val s = _state.value
+        val list = if (isNew) s.recordDays + item
+        else s.recordDays.map { if (it.id == item.id) item else it }
+        update {
+            it.copy(
+                recordDays = list,
+                activeRecordDayId = if (isNew || it.activeRecordDayId.isEmpty()) item.id else it.activeRecordDayId,
+                logText = if (isNew) "已新增纪念日「${item.name}」" else "已更新「${item.name}」",
+            )
+        }
+        return null
+    }
+
+    fun deleteRecordDay(id: String) = update {
+        val list = it.recordDays.filterNot { r -> r.id == id }
+        it.copy(
+            recordDays = list,
+            activeRecordDayId = if (it.activeRecordDayId == id) (list.firstOrNull()?.id ?: "") else it.activeRecordDayId,
+            logText = "已删除 1 个纪念日",
+        )
+    }
+
+    fun setActiveRecordDay(id: String) = update { it.copy(activeRecordDayId = id) }
 
     // ---------------- 流水明细 ----------------
 

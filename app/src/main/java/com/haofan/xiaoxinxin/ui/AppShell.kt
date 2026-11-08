@@ -1,43 +1,32 @@
 package com.haofan.xiaoxinxin.ui
 
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
-import android.view.View
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.haofan.xiaoxinxin.core.DetailMode
 import kotlinx.coroutines.launch
 
 /**
- * 应用外壳：三页 Pager + 悬浮 Liquid Glass 导航。
+ * 应用外壳：三页 Pager + 悬浮 Liquid Glass 导航；点首页卡片进二级页时整屏切换。
  *
- * ══ 毛玻璃这块返工过，坑记在这 ══════════════════════════════════
- * Compose 没有公开的「背景模糊」API。给空 Box 加 renderEffect 是**无效**的：
- * RenderEffect 只作用于「节点自己画出来的内容」，空 Box 什么都没画，自然没有模糊。
- * 上一版就栽在这，最后只是一块半透明白，所以完全没有玻璃感。
- *
- * ══ 这次的做法 ═════════════════════════════════════════════════
- * 底栏背后挂一个独立的 Android View，它把自己**身后的窗口区域**重绘一遍并模糊：
- *   1. 拿到 Activity 的 DecorView 的 RenderNode（包含整个界面，含 Pager 内容）；
- *   2. 绘制时把「底栏自己」临时设为 INVISIBLE，避免玻璃里映出自己（镜像递归）；
- *   3. 用 [RenderEffect] 做高斯模糊，再把结果贴到药丸下面。
- *
- * 效果是**实时**的：滑动、数字跳动、切主题，背后那层都跟着变。
- * 只在底栏那 76dp 的条带里模糊，开销与页面高度无关，滑页不掉帧。
- * API 31 以下没有 RenderEffect，退化成磨砂色 + 高光，观感仍是玻璃。
+ * 2.0 起首页是「进度卡墙」，三个二级页各自独立（薪酬 / 倒计时 / 纪念日），
+ * 进二级页后底栏收起、右上角出返回 —— 和 macOS 的页面层级一致。
  */
 @Composable
 fun AppShell(
@@ -48,9 +37,13 @@ fun AppShell(
     val pagerState = rememberPagerState(initialPage = Tab.HOME.ordinal) { Tab.entries.size }
     val scope = rememberCoroutineScope()
     val blurPx = with(LocalDensity.current) { 18.dp.toPx() }
+    var detail by remember { mutableStateOf<DetailMode?>(null) }
 
     LaunchedEffect(openSettingsTick) {
-        if (openSettingsTick > 0) pagerState.animateScrollToPage(Tab.SETTINGS.ordinal)
+        if (openSettingsTick > 0) {
+            detail = null
+            pagerState.animateScrollToPage(Tab.SETTINGS.ordinal)
+        }
     }
 
     Box(
@@ -58,47 +51,87 @@ fun AppShell(
             .fillMaxSize()
             .background(XC.bg),
     ) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize(),
-        ) { index ->
-            when (Tab.entries[index]) {
-                Tab.HOME -> HomeScreen(onOpenSettings = onOpenSettings, onToggleFloat = onToggleFloat)
-                Tab.STATS -> StatsScreen()
-                Tab.SETTINGS -> SettingsScreen()
+        AnimatedContent(
+            targetState = detail,
+            transitionSpec = {
+                if (targetState != null) {
+                    (slideInHorizontally(tween(260)) { it / 4 } + fadeIn(tween(200))) togetherWith
+                        fadeOut(tween(140))
+                } else {
+                    fadeIn(tween(200)) togetherWith
+                        (slideOutHorizontally(tween(220)) { it / 4 } + fadeOut(tween(160)))
+                }
+            },
+            label = "page",
+        ) { mode ->
+            if (mode != null) {
+                LiquidBackground {
+                    DetailHost(mode = mode, onBack = { detail = null })
+                }
+            } else {
+                // 真实底部栏布局：内容区占满除 dock 外的空间（weight(1f)），
+                // dock 作为第二个子项固定在底部 —— pager 物理上不可能盖到 dock 上，
+                // 从根上消除之前 overlay 方案下「最后一张卡被 dock 压住」的遮挡。
+                Column(Modifier.fillMaxSize().background(XC.bg)) {
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                        ) { index ->
+                            when (Tab.entries[index]) {
+                                Tab.HOME -> HomeScreen(
+                                    onOpenDetail = { detail = it },
+                                    onOpenSettings = onOpenSettings,
+                                    onToggleFloat = onToggleFloat,
+                                )
+                                Tab.STATS -> StatsScreen()
+                                Tab.SETTINGS -> SettingsScreen()
+                            }
+                        }
+                    }
+
+                    // ── 底部导航 ──
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                            .height(DockSpec.BarHeight),
+                    ) {
+                        // ① 背板：身后画面的实时模糊。
+                        // 注意必须用 factory 现场创建：remember 存下来会导致复用到已 detach 的 View。
+                        AndroidView(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clip(RoundedCornerShape(DockSpec.ShapeRadius)),
+                            factory = { ctx -> DockHost(ctx) },
+                            update = { v ->
+                                v.blurPx = blurPx
+                                v.dark = XC.isDark
+                                v.invalidate()
+                            },
+                        )
+
+                        // ②③④ 玻璃面 + 滑片 + 按钮
+                        GlassTabBar(
+                            pager = pagerState,
+                            onSelect = { tab -> scope.launch { pagerState.animateScrollToPage(tab.ordinal) } },
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
+                }
             }
         }
+    }
+}
 
-        // ── 悬浮导航 ──
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-                .fillMaxWidth()
-                .height(DockSpec.BarHeight),
-        ) {
-            // ① 背板：身后画面的实时模糊。
-            // 注意必须用 factory 现场创建：remember 存下来会导致复用到已 detach 的 View。
-            AndroidView(
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(DockSpec.ShapeRadius)),
-                factory = { ctx -> DockHost(ctx) },
-                update = { v ->
-                    v.blurPx = blurPx
-                    v.dark = XC.isDark
-                    v.invalidate()
-                },
-            )
-
-            // ②③④ 玻璃面 + 滑片 + 按钮
-            GlassTabBar(
-                pager = pagerState,
-                onSelect = { tab -> scope.launch { pagerState.animateScrollToPage(tab.ordinal) } },
-                modifier = Modifier.matchParentSize(),
-            )
-        }
+/** 三个二级页的分发；统一带背景与返回手势。 */
+@Composable
+private fun DetailHost(mode: DetailMode, onBack: () -> Unit) {
+    when (mode) {
+        DetailMode.SALARY -> SalaryScreen(onBack = onBack, onOpenSettings = {})
+        DetailMode.COUNTDOWN -> CountdownScreen(onBack = onBack)
+        DetailMode.RECORD_DAY -> RecordDayScreen(onBack = onBack)
     }
 }
 
@@ -107,10 +140,10 @@ fun AppShell(
  */
 /** 反射拿 View 自带 RenderNode（API 29+），拿不到返回 null 走兜底。 */
 private object RenderNodeCompat {
-    fun nodeOf(v: View): android.graphics.RenderNode? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+    fun nodeOf(v: android.view.View): android.graphics.RenderNode? {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return null
         return try {
-            val m = View::class.java.getMethod("getRenderNode")
+            val m = android.view.View::class.java.getMethod("getRenderNode")
             m.invoke(v) as? android.graphics.RenderNode
         } catch (_: Throwable) {
             null
@@ -118,7 +151,7 @@ private object RenderNodeCompat {
     }
 }
 
-private class DockHost(ctx: android.content.Context) : View(ctx) {
+private class DockHost(ctx: android.content.Context) : android.view.View(ctx) {
     var blurPx = 60f
     var dark = false
 
@@ -143,7 +176,7 @@ private class DockHost(ctx: android.content.Context) : View(ctx) {
             return
         }
 
-        val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val canBlur = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
         val loc = IntArray(2)
         getLocationInWindow(loc)
 
@@ -154,7 +187,9 @@ private class DockHost(ctx: android.content.Context) : View(ctx) {
 
         if (canBlur) {
             rn.setRenderEffect(
-                RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP)
+                android.graphics.RenderEffect.createBlurEffect(
+                    blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                )
             )
         }
         blit.isFilterBitmap = true

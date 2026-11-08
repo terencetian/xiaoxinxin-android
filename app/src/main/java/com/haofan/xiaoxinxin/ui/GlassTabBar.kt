@@ -2,14 +2,10 @@ package com.haofan.xiaoxinxin.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -254,29 +250,13 @@ private fun TabButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.88f else 1f,
-        animationSpec = spring(
-            dampingRatio = if (pressed) Spring.DampingRatioNoBouncy else Spring.DampingRatioLowBouncy,
-            stiffness = if (pressed) Spring.StiffnessHigh else Spring.StiffnessMedium,
-        ),
-        label = "press-scale",
-    )
-
     Column(
         modifier
-            .graphicsLayer {
-                scaleX = pressScale
-                scaleY = pressScale
-            }
-            .clip(RoundedCornerShape(DockSpec.ShapeRadius - DockSpec.Inset))
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
+            // 统一走液态玻璃按压：微缩 + 触点折射跟手，和全站按钮同一套手感
+            .liquidPress(
                 onClick = onClick,
+                shape = RoundedCornerShape(DockSpec.ShapeRadius - DockSpec.Inset),
+                scaleDown = 0.9f,
             )
             // 上下各 6dp 呼吸位，76 - 7*2 - 6*2 = 50dp 给图标 + 文字
             .padding(vertical = 6.dp),

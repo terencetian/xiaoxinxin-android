@@ -8,7 +8,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +75,7 @@ fun StatsScreen() {
             Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.statusBars)
+                .navigationBarsPadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
         ) {
@@ -301,7 +301,11 @@ fun StatsScreen() {
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .clickable { expanded = if (open) null else d.key },
+                                    .liquidPress(
+                                        onClick = { expanded = if (open) null else d.key },
+                                        shape = RoundedCornerShape(12.dp),
+                                        weight = PressWeight.Row,
+                                    ),
                             ) {
                                 Row(
                                     Modifier
@@ -414,7 +418,7 @@ fun StatsScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(110.dp))
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -442,7 +446,7 @@ private fun RangePicker(current: StatRange, onPick: (StatRange) -> Unit) {
                     .weight(1f)
                     .clip(RoundedCornerShape(11.dp))
                     .background(if (sel) Brush.verticalGradient(listOf(XC.goldHi, XC.gold)) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)))
-                    .clickable { onPick(r) }
+                    .liquidPress(onClick = { onPick(r) }, shape = RoundedCornerShape(11.dp))
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -478,7 +482,7 @@ private fun ToggleItem(text: String, sel: Boolean, onClick: () -> Unit) {
             .clip(RoundedCornerShape(999.dp))
             .background(if (sel) XC.card else Color.Transparent)
             .border(if (sel) 0.8.dp else 0.dp, if (sel) XC.lineStrong else Color.Transparent, RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick)
+            .liquidPress(onClick = onClick, shape = RoundedCornerShape(999.dp))
             .padding(horizontal = 14.dp, vertical = 5.dp),
     ) {
         Text(

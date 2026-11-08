@@ -19,19 +19,28 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ---------------- 主题 ----------------
+// ---------------- 主题：与 macOS 2.0 完全对齐的四套预设 ----------------
+//
+// 色值直接取自 macOS AppTheme.preset（RGB 0...1 换算成 0-255），
+// 所以两端同一套主题看起来是同一个颜色，不是「差不多」。
+//
+//  Android 这边多做了一层：由「底色 / 文本色 / 重点色」自动派生卡片、描边、
+//  阴影、玻璃分层色块。这样加一套主题只要写三个色值，且色卡无极调节也能复用。
 
 /** 一套完整的配色。所有界面颜色都必须从这里取，不允许在界面里写死色值。 */
 data class Palette(
     val key: String,
     val label: String,
     val isDark: Boolean,
+    /** 主题指纹：id + 自定义重点色 + 透明度。用来判断「配色是否真的变了」——
+     *  不能拿整个 Palette 做相等比较，里面的 Brush 每次都是新实例，会永远不相等。 */
+    val sig: String,
 
     val bg: Color,
     val card: Color,
@@ -41,7 +50,7 @@ data class Palette(
     val gold: Color,
     val goldDim: Color,
     val goldHi: Color,
-    /** 金底上的文字 / 圆钮颜色。 */
+    /** 强调底上的文字 / 圆钮颜色。 */
     val onGold: Color,
 
     val text: Color,
@@ -54,259 +63,214 @@ data class Palette(
     val lineStrong: Color,
 
     // —— 玻璃材质 ——
-    /** 主卡片 / 普通卡片的垂直渐变填充（自上而下）。 */
     val glassStrong: List<Color>,
     val glassSoft: List<Color>,
-    /** 卡片外圈高光边。 */
     val edge: Brush,
     val edgeInner: Color,
     val shadowAmbient: Color,
     val shadowSpot: Color,
 
     // —— 控件 ——
-    /** 输入框 / 小胶囊的浅填充。 */
     val fill: Color,
-    /** 进度条轨道。 */
     val trackFill: Color,
     val trackEdge: Color,
-    /** 玻璃按钮的常态填充与描边。 */
     val ghostA: Color,
     val ghostB: Color,
     val ghostEdge: Color,
-    /** 开关圆钮。 */
     val knobOn: Color,
     val knobOff: Color,
     val knobOffDim: Color,
-    /** 按钮顶部的白色高光 / 进度条的液体反光。 */
     val sheen: Color,
 
+    /** Sony 30th 的四色按键点缀，其他主题为空 */
+    val highlights: List<Color>,
     val blobs: List<Blob>,
+    /** 背景不透明度（只有 Liquid Glass 会小于 1） */
+    val alpha: Double,
 )
 
 /** 背景柔光斑：坐标与半径都是屏幕宽高的比例。 */
 data class Blob(val x: Float, val y: Float, val r: Float, val color: Color)
 
-private fun blob(x: Float, y: Float, r: Float, argb: Long) = Blob(x, y, r, Color(argb))
-
-/** 米白：暖白纸感 + 淡金晕染，默认主题。 */
-val CreamPalette = Palette(
-    key = "cream",
-    label = "米白",
-    isDark = false,
-    bg = Color(0xFFF7F3EA),
-    card = Color(0xFFFFFFFF),
-    cardHi = Color(0xFFFFFCF5),
-    gold = Color(0xFFA8701A),
-    goldDim = Color(0xFF7C5010),
-    goldHi = Color(0xFFC99239),
-    onGold = Color(0xFFFFFBF2),
-    text = Color(0xFF241E16),
-    textDim = Color(0xB3241E16),
-    textFaint = Color(0x8A241E16),
-    orange = Color(0xFFC2600F),
-    teal = Color(0xFF1C7F68),
-    danger = Color(0xFFC93A38),
-    line = Color(0x0F241E16),
-    lineStrong = Color(0x1F241E16),
-    glassStrong = listOf(Color(0xFFFFFFFF), Color(0xFAFFFFFF), Color(0xF2FFFFFF)),
-    glassSoft = listOf(Color(0xF7FFFFFF), Color(0xECFFFFFF)),
-    edge = Brush.verticalGradient(
-        listOf(Color(0xFFFFFFFF), Color(0x1F8A6B2A), Color(0x0D241E16))
+/** 2.0 四套预设，顺序与 macOS 设置页一致。 */
+enum class AppTheme(
+    val id: String,
+    val label: String,
+    val detail: String,
+    val bg: Color,
+    val text: Color,
+    val accent: Color,
+    val secondary: Color,
+    val alpha: Double,
+) {
+    LIQUID_GLASS(
+        "liquidGlass", "Liquid Glass",
+        "初始透明玻璃：跟随背景光影，背景透明度可单独调",
+        Color(0xFFFFFFFF), Color(0xFF1F2126), Color(0xFFD60014), Color(0xFF3C6E9E), 0.58,
     ),
-    edgeInner = Color(0x14FFFFFF),
-    shadowAmbient = Color(0x1F9A7B44),
-    shadowSpot = Color(0x2E8A6B2A),
-    fill = Color(0x0D241E16),
-    trackFill = Color(0x14241E16),
-    trackEdge = Color(0x0A241E16),
-    ghostA = Color(0x14241E16),
-    ghostB = Color(0x08241E16),
-    ghostEdge = Color(0x1F241E16),
-    knobOn = Color(0xFFFFFFFF),
-    knobOff = Color(0xFFFFFFFF),
-    knobOffDim = Color(0x66FFFFFF),
-    sheen = Color(0x8CFFFFFF),
-    blobs = listOf(
-        blob(0.90f, -0.04f, 1.00f, 0x1CE8C878L),
-        blob(0.02f, 0.18f, 0.80f, 0x14F0B87AL),
-        blob(-0.06f, 0.60f, 0.95f, 0x187FD3B4L),
-        blob(0.94f, 0.88f, 0.88f, 0x148FB6E8L),
-        blob(0.50f, 0.42f, 1.10f, 0x14FFFFFFL),
+    MINT(
+        "mint", "白 + 薄荷绿",
+        "纯白底 + 薄荷绿强调色，清爽不刺眼",
+        Color(0xFFFFFFFF), Color(0xFF14332B), Color(0xFF1AAD80), Color(0xFF2A7BD4), 1.0,
     ),
-)
-
-/** 彩虹：粉白打底，五色柔光叠成彩虹晕，边框走扫掠渐变。 */
-val RainbowPalette = Palette(
-    key = "rainbow",
-    label = "彩虹",
-    isDark = false,
-    bg = Color(0xFFFDF7FA),
-    card = Color(0xFFFFFFFF),
-    cardHi = Color(0xFFFFF5FB),
-    gold = Color(0xFFD81B60),
-    goldDim = Color(0xFF9C1246),
-    goldHi = Color(0xFFF0629A),
-    onGold = Color(0xFFFFFFFF),
-    text = Color(0xFF2A1730),
-    textDim = Color(0xB32A1730),
-    textFaint = Color(0x8A2A1730),
-    orange = Color(0xFFEF6C10),
-    teal = Color(0xFF0E9F8E),
-    danger = Color(0xFFD32F2F),
-    line = Color(0x142A1730),
-    lineStrong = Color(0x242A1730),
-    glassStrong = listOf(Color(0xFFFFFFFF), Color(0xFAFFFFFF), Color(0xF0FFF2FA)),
-    glassSoft = listOf(Color(0xF7FFFFFF), Color(0xEAFFFAFD)),
-    edge = Brush.sweepGradient(
-        listOf(
-            Color(0x99FF4FA3), Color(0x99FF9A3C), Color(0x99FFD84A),
-            Color(0x9934C7B4), Color(0x997B5CFF), Color(0x99FF4FA3),
-        )
+    SKY(
+        "sky", "白 + 天蓝",
+        "纯白底 + 天蓝强调色，冷静通透",
+        Color(0xFFFFFFFF), Color(0xFF122945), Color(0xFF2985E6), Color(0xFF12A8A0), 1.0,
     ),
-    edgeInner = Color(0x1AFFFFFF),
-    shadowAmbient = Color(0x24C2559A),
-    shadowSpot = Color(0x2E8A4BD0),
-    fill = Color(0x0D2A1730),
-    trackFill = Color(0x142A1730),
-    trackEdge = Color(0x0A2A1730),
-    ghostA = Color(0x142A1730),
-    ghostB = Color(0x082A1730),
-    ghostEdge = Color(0x242A1730),
-    knobOn = Color(0xFFFFFFFF),
-    knobOff = Color(0xFFFFFFFF),
-    knobOffDim = Color(0x66FFFFFF),
-    sheen = Color(0x8CFFFFFF),
-    blobs = listOf(
-        blob(0.92f, 0.02f, 1.10f, 0x33FF4FA3L),
-        blob(0.02f, 0.14f, 0.90f, 0x30FF9A3CL),
-        blob(0.10f, 0.52f, 1.00f, 0x2AFFD84AL),
-        blob(0.90f, 0.62f, 0.95f, 0x2E34C7B4L),
-        blob(0.42f, 0.96f, 1.05f, 0x337B5CFFL),
-        blob(0.55f, 0.34f, 0.80f, 0x1AFFFFFFL),
+    SONY_30(
+        "sony30", "Sony 30th",
+        "初代 PlayStation 30 周年：浅灰机身 + 深灰字 + 四色点缀",
+        Color(0xFFD1D4D6), Color(0xFF26292E), Color(0xFF474F5C), Color(0xFF3373D9), 1.0,
     ),
-)
-
-/**
- * 薄荷：纯白打底 + 高亮绿，走极简。
- *
- * 设计要点（相对米白的取舍）：
- *  - 背景直接给纯白，不做光斑晕染（blobs 全部压到 0x0A 以下，几乎看不见，
- *    只留一点点绿意防止大面积白屏刺眼）；
- *  - 主色只用一个绿，饱和度拉高（#0AA66A），配合灰阶文字，接近 Linear / Notion 那种单色强调；
- *  - teal（次强调）刻意换成蓝，不然青绿和主色绿混在一起分不清层级。
- */
-val MintPalette = Palette(
-    key = "mint",
-    label = "薄荷",
-    isDark = false,
-    bg = Color(0xFFFFFFFF),
-    card = Color(0xFFFCFDFC),
-    cardHi = Color(0xFFF4FAF7),
-    gold = Color(0xFF0AA66A),
-    goldDim = Color(0xFF067A4E),
-    goldHi = Color(0xFF00D97E),
-    onGold = Color(0xFFFFFFFF),
-    text = Color(0xFF16211C),
-    textDim = Color(0xB316211C),
-    textFaint = Color(0x8A16211C),
-    orange = Color(0xFFE0700F),
-    teal = Color(0xFF2A7BD4),
-    danger = Color(0xFFD64545),
-    line = Color(0x0F16211C),
-    lineStrong = Color(0x1F16211C),
-    glassStrong = listOf(Color(0xFFFFFFFF), Color(0xFBFFFFFF), Color(0xF5FFFFFF)),
-    glassSoft = listOf(Color(0xFAFFFFFF), Color(0xF0FFFFFF)),
-    edge = Brush.verticalGradient(
-        listOf(Color(0xFFFFFFFF), Color(0x1F0AA66A), Color(0x0D16211C))
-    ),
-    edgeInner = Color(0x14FFFFFF),
-    shadowAmbient = Color(0x1444AA88),
-    shadowSpot = Color(0x1F0AA66A),
-    fill = Color(0x0D16211C),
-    trackFill = Color(0x1416211C),
-    trackEdge = Color(0x0A16211C),
-    ghostA = Color(0x1416211C),
-    ghostB = Color(0x0816211C),
-    ghostEdge = Color(0x1F16211C),
-    knobOn = Color(0xFFFFFFFF),
-    knobOff = Color(0xFFFFFFFF),
-    knobOffDim = Color(0x66FFFFFF),
-    sheen = Color(0x8CFFFFFF),
-    blobs = listOf(
-        blob(0.90f, -0.04f, 1.00f, 0x0A00C97AL),
-        blob(0.02f, 0.18f, 0.80f, 0x0A34E0A8L),
-        blob(-0.06f, 0.60f, 0.95f, 0x08B2F0D4L),
-        blob(0.94f, 0.88f, 0.88f, 0x08A8D8F0L),
-        blob(0.50f, 0.42f, 1.10f, 0x0AFFFFFFL),
-    ),
-)
-
-/** 深夜蓝：夜间 / 暗色模式的经典配色，也是 1.9.4 之前唯一的一套。 */
-val NightPalette = Palette(
-    key = "night",
-    label = "暗夜",
-    isDark = true,
-    bg = Color(0xFF070E1B),
-    card = Color(0xFF14213A),
-    cardHi = Color(0xFF1D2C4A),
-    gold = Color(0xFFFFD257),
-    goldDim = Color(0xFFB08A34),
-    goldHi = Color(0xFFFFE9A8),
-    onGold = Color(0xFF241A00),
-    text = Color(0xFFF4F7FC),
-    textDim = Color(0xB3F4F7FC),
-    textFaint = Color(0x7AF4F7FC),
-    orange = Color(0xFFFF9F27),
-    teal = Color(0xFF5DCAA5),
-    danger = Color(0xFFE24B4A),
-    line = Color(0x1FFFFFFF),
-    lineStrong = Color(0x33FFFFFF),
-    glassStrong = listOf(Color(0x33FFFFFF), Color(0x1AFFFFFF), Color(0x0FFFFFFF)),
-    glassSoft = listOf(Color(0x26FFFFFF), Color(0x12FFFFFF)),
-    edge = Brush.verticalGradient(
-        listOf(Color(0x8CFFFFFF), Color(0x1FFFFFFF), Color(0x0AFFFFFF))
-    ),
-    edgeInner = Color(0x33FFFFFF),
-    shadowAmbient = Color(0x66000000),
-    shadowSpot = Color(0x88000000),
-    fill = Color(0x14FFFFFF),
-    trackFill = Color(0x1FFFFFFF),
-    trackEdge = Color(0x14FFFFFF),
-    ghostA = Color(0x1AFFFFFF),
-    ghostB = Color(0x0AFFFFFF),
-    ghostEdge = Color(0x4DFFFFFF),
-    knobOn = Color(0xFF241A00),
-    knobOff = Color(0xE6F4F7FA),
-    knobOffDim = Color(0x66F4F7FA),
-    sheen = Color(0x66FFFFFF),
-    blobs = listOf(
-        blob(0.92f, 0.02f, 0.82f, 0x33FFD257L),
-        blob(0.18f, 0.24f, 0.68f, 0x1FFF9F27L),
-        blob(0.00f, 0.64f, 0.88f, 0x225DCAA5L),
-        blob(0.97f, 0.86f, 0.85f, 0x3D2E6BD6L),
-        blob(0.50f, 0.46f, 1.15f, 0x4D1B3560L),
-    ),
-)
-
-/** 设置里的三个选项。SYSTEM 是策略，不是配色：亮色跟米白，暗色跟暗夜。 */
-enum class ThemeMode(val key: String, val label: String, val desc: String) {
-    CREAM("cream", "米白", "暖白纸感，白天看着最舒服"),
-    MINT("mint", "薄荷", "纯白打底，高亮绿强调，极简单色"),
-    RAINBOW("rainbow", "彩虹", "粉白底 + 五色晕染，边框走彩虹"),
-    SYSTEM("system", "跟随系统", "白天米白、夜间暗夜，跟着系统开关切"),
     ;
 
+    val isGlass: Boolean get() = this == LIQUID_GLASS
+
+    /** Sony 30th 用初代四色按键做点缀 */
+    val highlights: List<Color>
+        get() = when (this) {
+            SONY_30 -> listOf(Color(0xFF33B359), Color(0xFFE0333D), Color(0xFF3373D9), Color(0xFFD973BF))
+            else -> emptyList()
+        }
+
+    val swatches: List<Color>
+        get() = when (this) {
+            LIQUID_GLASS -> listOf(Color(0xFFF2F2F2), Color(0xFFB8B8B8), Color(0xFFD60014))
+            MINT -> listOf(Color.White, Color(0xFF1AAD80), Color(0xFF9FEBD1))
+            SKY -> listOf(Color.White, Color(0xFF2985E6), Color(0xFFA8D6FA))
+            SONY_30 -> highlights
+        }
+
     companion object {
-        fun of(key: String): ThemeMode = entries.firstOrNull { it.key == key } ?: CREAM
+        fun of(id: String?): AppTheme = entries.firstOrNull { it.id == id } ?: SKY
     }
 }
 
-fun resolvePalette(mode: ThemeMode, systemDark: Boolean): Palette = when (mode) {
-    ThemeMode.CREAM -> CreamPalette
-    ThemeMode.MINT -> MintPalette
-    ThemeMode.RAINBOW -> RainbowPalette
-    ThemeMode.SYSTEM -> if (systemDark) NightPalette else CreamPalette
+// —— 色彩工具 ——
+
+private fun luminance(c: Color): Double =
+    0.299 * c.red + 0.587 * c.green + 0.114 * c.blue
+
+private fun lighten(c: Color, f: Float): Color = lerp(c, Color.White, f)
+private fun darken(c: Color, f: Float): Color = lerp(c, Color.Black, f)
+
+/** 白底混入一点文本色，得到「同一色系的深一档」表面色。 */
+private fun surfaceOf(bg: Color, text: Color, f: Float): Color = lerp(bg, text, f.coerceIn(0f, 0.5f))
+
+private fun withAlpha(c: Color, a: Float): Color = c.copy(alpha = (c.alpha * a).coerceIn(0f, 1f))
+
+/** 由预设的底色 / 文本 / 重点色派生出完整 Palette。 */
+fun buildPalette(
+    theme: AppTheme,
+    accentRgb: String = "",
+    alphaOverride: Double? = null,
+    bgRgb: String = "",
+    textRgb: String = "",
+): Palette {
+    val bg = parseRgb(bgRgb) ?: theme.bg
+    val text = parseRgb(textRgb) ?: theme.text
+    val accent = parseRgb(accentRgb) ?: theme.accent
+    val dark = luminance(bg) < 0.5
+    val alpha = (alphaOverride ?: theme.alpha).coerceIn(0.15, 1.0)
+
+    val cardBase = if (dark) lighten(bg, 0.10f) else lerp(bg, Color.White, 0.55f)
+    val onAccent = if (luminance(accent) > 0.62) Color(0xFF1F2126) else Color.White
+
+    val blobs = when (theme) {
+        AppTheme.LIQUID_GLASS -> listOf(
+            Blob(0.88f, -0.02f, 1.0f, Color(0x2E9ECFFF)),
+            Blob(0.04f, 0.20f, 0.85f, Color(0x1FD60014)),
+            Blob(-0.04f, 0.62f, 0.95f, Color(0x1F7FC4FF)),
+            Blob(0.94f, 0.88f, 0.9f, Color(0x1FA8B8D0)),
+            Blob(0.5f, 0.42f, 1.1f, Color(0x26FFFFFF)),
+        )
+        AppTheme.MINT -> listOf(
+            Blob(0.9f, -0.04f, 1.0f, Color(0x1A1AAD80)),
+            Blob(0.02f, 0.18f, 0.8f, Color(0x1434E0A8)),
+            Blob(-0.06f, 0.6f, 0.95f, Color(0x12B2F0D4)),
+            Blob(0.94f, 0.88f, 0.88f, Color(0x122A7BD4)),
+            Blob(0.5f, 0.42f, 1.1f, Color(0x14FFFFFF)),
+        )
+        AppTheme.SKY -> listOf(
+            Blob(0.9f, -0.04f, 1.0f, Color(0x262985E6)),
+            Blob(0.02f, 0.18f, 0.82f, Color(0x1A5FB4F0)),
+            Blob(-0.06f, 0.6f, 0.95f, Color(0x1412A8A0)),
+            Blob(0.94f, 0.88f, 0.88f, Color(0x1490C4F4)),
+            Blob(0.5f, 0.42f, 1.1f, Color(0x1AFFFFFF)),
+        )
+        AppTheme.SONY_30 -> listOf(
+            Blob(0.9f, -0.02f, 0.9f, Color(0x223373D9)),
+            Blob(0.04f, 0.22f, 0.8f, Color(0x1AE0333D)),
+            Blob(-0.04f, 0.66f, 0.9f, Color(0x1A33B359)),
+            Blob(0.92f, 0.9f, 0.85f, Color(0x1AD973BF)),
+            Blob(0.5f, 0.46f, 1.1f, Color(0x26FFFFFF)),
+        )
+    }
+
+    return Palette(
+        key = theme.id,
+        label = theme.label,
+        isDark = dark,
+        sig = "${theme.id}|$accentRgb|$bgRgb|$textRgb|${"%.3f".format(alpha)}",
+        bg = bg,
+        card = cardBase,
+        cardHi = if (dark) lighten(bg, 0.16f) else lerp(bg, Color.White, 0.75f),
+        gold = accent,
+        goldDim = darken(accent, 0.72f),
+        goldHi = lighten(accent, if (luminance(accent) > 0.6) 0.16f else 0.30f),
+        onGold = onAccent,
+        text = text,
+        textDim = withAlpha(text, 0.70f),
+        textFaint = withAlpha(text, 0.54f),
+        orange = if (theme == AppTheme.SONY_30) Color(0xFFE0333D) else Color(0xFFC2600F),
+        teal = theme.secondary,
+        danger = Color(0xFFC93A38),
+        line = withAlpha(text, 0.08f),
+        lineStrong = withAlpha(text, 0.16f),
+        glassStrong = if (dark) {
+            listOf(Color(0x33FFFFFF), Color(0x1AFFFFFF), Color(0x0FFFFFFF))
+        } else {
+            listOf(Color(0xFFFFFFFF), Color(0xFAFFFFFF), Color(0xF4FFFFFF))
+        },
+        glassSoft = if (dark) {
+            listOf(Color(0x26FFFFFF), Color(0x12FFFFFF))
+        } else {
+            listOf(Color(0xF7FFFFFF), Color(0xEDFFFFFF))
+        },
+        edge = Brush.verticalGradient(listOf(Color(0xFFFFFFFF), withAlpha(accent, 0.35f), withAlpha(text, 0.10f))),
+        edgeInner = if (dark) Color(0x33FFFFFF) else Color(0x14FFFFFF),
+        shadowAmbient = withAlpha(text, 0.14f),
+        shadowSpot = withAlpha(accent, 0.22f),
+        fill = withAlpha(text, 0.055f),
+        trackFill = withAlpha(text, 0.09f),
+        trackEdge = withAlpha(text, 0.04f),
+        ghostA = withAlpha(text, 0.08f),
+        ghostB = withAlpha(text, 0.03f),
+        ghostEdge = withAlpha(text, 0.13f),
+        knobOn = Color.White,
+        knobOff = Color.White,
+        knobOffDim = Color(0x66FFFFFF),
+        sheen = Color(0x8CFFFFFF),
+        highlights = theme.highlights,
+        blobs = blobs,
+        alpha = alpha,
+    )
 }
+
+private fun parseRgb(raw: String): Color? {
+    if (raw.isBlank()) return null
+    val p = raw.split(",").mapNotNull { it.trim().toFloatOrNull() }
+    if (p.size != 3) return null
+    return Color(
+        red = (p[0] / 255f).coerceIn(0f, 1f),
+        green = (p[1] / 255f).coerceIn(0f, 1f),
+        blue = (p[2] / 255f).coerceIn(0f, 1f),
+    )
+}
+
+fun rgbString(c: Color): String =
+    "${(c.red * 255).toInt()},${(c.green * 255).toInt()},${(c.blue * 255).toInt()}"
 
 /**
  * 全局配色入口。
@@ -315,13 +279,15 @@ fun resolvePalette(mode: ThemeMode, systemDark: Boolean): Palette = when (mode) 
  * 都会被自动登记成依赖 —— 换主题时整个界面自动重组，不需要改调用点。
  */
 object XC {
-    private val cur = mutableStateOf(CreamPalette)
+    private val cur = mutableStateOf(buildPalette(AppTheme.SKY))
 
     val palette: Palette get() = cur.value
     val isDark: Boolean get() = cur.value.isDark
+    val theme: AppTheme get() = AppTheme.of(cur.value.key)
+    val highlights: List<Color> get() = cur.value.highlights
 
     fun use(p: Palette) {
-        if (cur.value.key != p.key) cur.value = p
+        if (cur.value.sig != p.sig) cur.value = p
     }
 
     val bg: Color get() = cur.value.bg
@@ -357,32 +323,36 @@ object XC {
     val sheen: Color get() = cur.value.sheen
 }
 
-/** 进度条的三档样式。金色是默认，纯色跟随主题主色，彩虹走五色渐变。 */
-enum class BarStyle(val key: String, val label: String) {
-    GOLD("gold", "金色"),
-    SOLID("solid", "纯色"),
-    RAINBOW("rainbow", "彩虹"),
-    ;
-
-    companion object {
-        fun of(key: String): BarStyle = entries.firstOrNull { it.key == key } ?: GOLD
+/**
+ * 玻璃分层（对应 macOS Glass.level）：
+ *  1 分区容器（最浅）/ 2 分组卡 / 3 分区标题（最深）/ 4 组内行。
+ * 实色主题走「底色混文本色」，玻璃主题走半透明白雾。
+ */
+object Glass {
+    fun level(n: Int): Color {
+        val p = XC.palette
+        return if (p.key == AppTheme.LIQUID_GLASS.id) {
+            val a = listOf(0f, 0.05f, 0.10f, 0.18f, 0.05f)[n.coerceIn(1, 4)]
+            if (p.isDark) Color.White.copy(alpha = 0.05f + a) else Color.White.copy(alpha = 0.28f + a)
+        } else {
+            val f = listOf(0f, 0.035f, 0.075f, 0.17f, 0.055f)[n.coerceIn(1, 4)]
+            lerp(p.bg, p.text, f.coerceIn(0f, 0.5f))
+        }
     }
-}
 
-/** 黄金三色：不跟主题走，任何配色下都是同一条真正的金色进度条。 */
-private val GoldLiquid = listOf(Color(0xFFDFA02A), Color(0xFFFFD257), Color(0xFFFFE9A8))
+    fun fill(a: Double): Color =
+        if (XC.palette.key == AppTheme.LIQUID_GLASS.id) {
+            Color.White.copy(alpha = (0.10 + a * 0.45).toFloat().coerceAtMost(0.9f))
+        } else {
+            lerp(XC.bg, XC.text, (0.035 + a * 0.30).toFloat().coerceAtMost(0.34f))
+        }
 
-/** 彩虹液面：粉 → 橙 → 黄 → 青 → 紫。 */
-private val RainbowLiquid = listOf(
-    Color(0xFFFF4FA3), Color(0xFFFF9A3C), Color(0xFFFFD84A),
-    Color(0xFF34C7B4), Color(0xFF7B5CFF),
-)
-
-@Composable
-fun barBrush(style: BarStyle): Brush = when (style) {
-    BarStyle.GOLD -> Brush.horizontalGradient(GoldLiquid)
-    BarStyle.SOLID -> SolidColor(XC.gold)
-    BarStyle.RAINBOW -> Brush.horizontalGradient(RainbowLiquid)
+    fun line(a: Double): Color =
+        if (XC.palette.key == AppTheme.LIQUID_GLASS.id) {
+            Color.White.copy(alpha = (0.10 + a * 0.25).toFloat().coerceAtMost(0.5f))
+        } else {
+            XC.text.copy(alpha = (0.06 + a * 0.24).toFloat().coerceAtMost(0.42f))
+        }
 }
 
 val NumFont: FontFamily = FontFamily.Monospace
@@ -433,16 +403,14 @@ fun GlassCard(
     Box(
         modifier
             .shadow(
-                elevation = if (strong) 16.dp else 8.dp,
+                elevation = if (strong) 14.dp else 7.dp,
                 shape = shape,
                 ambientColor = XC.shadowAmbient,
                 spotColor = XC.shadowSpot,
             )
             .clip(shape)
             .background(Brush.verticalGradient(if (strong) XC.glassStrong else XC.glassSoft))
-            // 外圈高光边
             .border(1.dp, XC.edge, shape)
-            // 内侧一层更细的亮边，做出玻璃折射的双层感
             .padding(0.6.dp)
             .border(
                 0.6.dp,
@@ -453,15 +421,15 @@ fun GlassCard(
     )
 }
 
-/** 背景：底色 + 若干柔光斑，让上层玻璃"透"出颜色。三套主题各有自己的光斑布局。 */
+/** 背景：底色 + 若干柔光斑，让上层玻璃"透"出颜色。四套主题各有自己的光斑布局。 */
 @Composable
 fun LiquidBackground(content: @Composable BoxScope.() -> Unit) {
-    val blobs = XC.palette.blobs
-    Box(Modifier.fillMaxSize().background(XC.bg)) {
+    val p = XC.palette
+    Box(Modifier.fillMaxSize().background(p.bg)) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            for (b in blobs) {
+            for (b in p.blobs) {
                 val c = Offset(w * b.x, h * b.y)
                 val r = w * b.r
                 if (r <= 0f) continue
@@ -479,3 +447,16 @@ fun LiquidBackground(content: @Composable BoxScope.() -> Unit) {
         content()
     }
 }
+
+/** 主色渐变：进度条、主按钮统一用它，保证换主题一致。 */
+@Composable
+fun accentBrush(): Brush = Brush.horizontalGradient(
+    listOf(XC.goldHi, XC.gold, XC.goldDim)
+)
+
+/** Sony 主题的四色点缀；其他主题回落到主色。 */
+fun accentOrHighlights(index: Int): Color =
+    XC.highlights.getOrNull(index % (XC.highlights.size.coerceAtLeast(1))) ?: XC.gold
+
+/** 主题指纹：给设置页做「是否已改动」提示用 */
+val currentThemeSig: String get() = XC.palette.sig

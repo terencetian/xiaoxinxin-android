@@ -1,9 +1,8 @@
-# 小薪薪 · Android 尝鲜版
+# 小薪薪 · Android 版
 
-> ⚠️ **这是尝鲜版（beta）**：功能跑得通，但没上架应用商店，也没做过全机型覆盖测试。遇到问题欢迎提 issue，别当正式版用。
->
-> 📦 当前 **v1.9.9**（versionCode 34）：包名改为 `com.haofan.xiaoxinxin`（去掉 `.debug` 后缀），从这一版起包名固定，以后转正式版可原地升级。
-> 装过 v1.9.8 及更早版本的，因为包名变了**需要先卸载旧的**，桌面会短暂出现两个图标。
+> 📦 当前 **v2.6.2**（Build 43，2026-11-08）：版本号与 macOS 版同步，正式签名版，覆盖安装即可升级，数据不丢。包名固定为 `com.haofan.xiaoxinxin`。
+> 功能对齐 macOS：首页三模块分页（Your Money 薪酬 / Your Days 倒计时 / Your Days 纪念日）、四套主题、19 组设置、隐私模式、事件管理。
+> 从 v1.9.x 及更早版本（包名不同）升级的**需要先卸载旧的**，桌面会短暂出现两个图标。
 
 Mac 版「小薪薪」的手机版。填月薪、打卡，屏幕上实时显示今天已经挣了多少钱。
 
@@ -17,7 +16,7 @@ Mac 版「小薪薪」的手机版。填月薪、打卡，屏幕上实时显示�
 
 ## 装上试试
 
-1. 到 [Releases](https://github.com/terencetian/xiaoxinxin-android/releases) 下载最新的 `xiaoxinxin-android-vX.X.X-beta.apk`
+1. 到 [Releases](https://github.com/terencetian/xiaoxinxin-android/releases) 下载最新的 `xiaoxinxin-android-vX.X.X.apk`
 2. 手机上点开安装，允许「安装未知来源应用」
 3. 首次打开给两个权限：**通知**（状态栏常驻金额）、**悬浮窗**（顶部药丸）
 4. 填月薪 → 打卡上班
@@ -61,7 +60,11 @@ Mac 版「小薪薪」的手机版。填月薪、打卡，屏幕上实时显示�
 | 📅 工作日自动算 | 按国办法定节假日推算当月工作日，含调休补班 |
 | 📈 统计页 | 本周 / 本月 / 上月 / 本年四种口径：累计进账、累计加班、出勤天数、日均、同比上周，带柱状图与逐日明细 |
 | 📋 流水明细 | 按日期范围查每日到账，支持补记与删除 |
-| 🎨 三套主题 | 米白 / 彩虹 / 跟随系统（自动切暗夜蓝） |
+| 🎨 四套主题 | 米白 / 薄荷绿 / 天蓝（默认）/ 索尼 30 周年，与 macOS 2.0 一一对应 |
+| 🔒 隐私模式 | 工资数字改为百分比进度，4 位 PIN 解锁，60 秒后自动恢复 |
+| ⏳ Your Days · 倒计时 | 自定义目标日（含时刻），按秒算进度、按自然日算剩余，事件可增删改切换 |
+| 💞 Your Days · 纪念日 | 累计时长（X 年 Y 月 Z 天）+ 累计天数，事件管理同上 |
+| 🧩 首页布局 | 三张进度卡可单独显隐（至少留一张），卡片点开进对应二级页 |
 | 🌈 进度条三档 | 金色（默认）/ 纯色（跟随主色）/ 彩虹 |
 | 💊 悬浮药丸 | 三态形变、拖动吸附、顶部保护栏（滑不进状态栏） |
 | 🔔 实况通知 | 通知栏进度条，每 3 秒刷新 |
@@ -134,10 +137,14 @@ app/src/main/java/com/haofan/xiaoxinxin/
 │   ├── Stats.kt       统计聚合（本周 / 本月 / 上月 / 本年）
 │   ├── LiveUpdate.kt  实况通知（ProgressStyle + 短文案）
 │   └── IslandDoctor.kt 系统岛能力体检 + 品牌实测结论
-├── ui/         Compose 界面（Liquid Glass 风格，三套 Palette）
-│   ├── AppShell.kt      三 Tab 骨架：主页 / 统计 / 设置
+├── ui/         Compose 界面（Liquid Glass 风格，四套 Palette）
+│   ├── AppShell.kt      三 Tab 骨架：主页 / 统计 / 设置（真实底部栏，不遮挡内容）
 │   ├── GlassTabBar.kt   玻璃底栏（金描边分层）
-│   ├── HomeScreen.kt / StatsScreen.kt / SettingsScreen.kt
+│   ├── HomeScreen.kt    首页三进度卡（可显隐）
+│   ├── SalaryScreen.kt / CountdownScreen.kt / RecordDayScreen.kt   三个二级页
+│   ├── StatsScreen.kt / SettingsScreen.kt（19 组可折叠设置）
+│   ├── Theme.kt         四套主题 Palette + 派生配色
+│   └── Components.kt    通用卡片 / 按钮 / 输入
 └── floatx/     悬浮窗前台服务（药丸岛自绘、三态形变、拖动吸附）
 ```
 
