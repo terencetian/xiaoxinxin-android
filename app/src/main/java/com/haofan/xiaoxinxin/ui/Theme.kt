@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -460,3 +461,31 @@ fun accentOrHighlights(index: Int): Color =
 
 /** 主题指纹：给设置页做「是否已改动」提示用 */
 val currentThemeSig: String get() = XC.palette.sig
+
+/**
+ * 由当前 EarnState 推导悬浮岛 / 通知部件的配色（2.7）。
+ *
+ * FloatService 在另一个上下文里跑，不能依赖 Compose；它每秒 tick 时用
+ * sig 比对决定是否换色。主题、自定义背景 / 文字 / 重点色、背景透明度
+ * 全部在这一步换算成 ARGB，部件配色与 App 内永远同源。
+ */
+fun widgetColorsOf(s: com.haofan.xiaoxinxin.core.EarnState): com.haofan.xiaoxinxin.core.WidgetColors {
+    val p = buildPalette(
+        AppTheme.of(s.themeId),
+        s.themeAccent,
+        s.themeAlpha,
+        s.themeBg,
+        s.themeText,
+    )
+    return com.haofan.xiaoxinxin.core.WidgetColors(
+        sig = p.sig,
+        bg = p.bg.copy(alpha = (p.bg.alpha * p.alpha).toFloat()).toArgb(),
+        edge = p.lineStrong.toArgb(),
+        edgeInner = p.edgeInner.toArgb(),
+        accent = p.gold.toArgb(),
+        text = p.text.toArgb(),
+        textDim = p.textDim.toArgb(),
+        textFaint = p.textFaint.toArgb(),
+        track = p.trackFill.toArgb(),
+    )
+}

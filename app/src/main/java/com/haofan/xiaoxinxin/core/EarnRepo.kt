@@ -35,6 +35,22 @@ object EarnRepo {
         // 先跑一次性主题迁移，再读存档 —— 否则读到的还是旧主题
         migrateDefaultThemeToSky(p)
         var s = load(p)
+        // 2.7：悬浮岛 / 通知支持 MONEY·DAYS 轮播。老用户如果从没配过显示项
+        // （还是出厂的单项「今日已赚」+ 不轮播），直接给到新体验：
+        // 轮播 今日已赚 → 倒计时 → 纪念日。自己配过的原样保留。
+        if (!p.getBoolean("statusBarAutoConfigured27", false)) {
+            p.edit().putBoolean("statusBarAutoConfigured27", true).apply()
+            if (s.statusBarKinds == setOf(StatusBarKind.MONEY_TODAY.key) && !s.statusBarRotate) {
+                s = s.copy(
+                    statusBarKinds = setOf(
+                        StatusBarKind.MONEY_TODAY.key,
+                        StatusBarKind.DAYS_COUNTDOWN.key,
+                        StatusBarKind.DAYS_RECORD.key,
+                    ),
+                    statusBarRotate = true,
+                )
+            }
+        }
         if (s.dayKey.isEmpty()) {
             s = s.copy(dayKey = todayKey())
             save(p, s)

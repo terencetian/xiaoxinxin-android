@@ -24,10 +24,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.haofan.xiaoxinxin.core.EarnRepo
+import com.haofan.xiaoxinxin.core.EarnState
 import com.haofan.xiaoxinxin.core.StatRange
 import com.haofan.xiaoxinxin.core.Stats
+import com.haofan.xiaoxinxin.core.countdownProgress
 import com.haofan.xiaoxinxin.core.dateKey
 import com.haofan.xiaoxinxin.core.fmt
+import com.haofan.xiaoxinxin.core.percentText
+import com.haofan.xiaoxinxin.core.recordDayProgress
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.YearMonth
@@ -43,6 +47,7 @@ import java.time.YearMonth
 @Composable
 fun StatsScreen() {
     val s by EarnRepo.state.collectAsState()
+    var tab by remember { mutableStateOf("money") }     // 2.7：MONEY / DAYS 两大标签
     var range by remember { mutableStateOf(StatRange.MONTH) }
     var otFirst by remember { mutableStateOf(false) }   // false = 薪酬视角，true = 加班视角
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -86,7 +91,7 @@ fun StatsScreen() {
                 Text("统计", color = XC.text, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, letterSpacing = -0.5.sp)
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    range.boundsText(today),
+                    if (tab == "money") range.boundsText(today) else "Your Days",
                     color = XC.textFaint,
                     fontSize = 11.5.sp,
                     maxLines = 1,
@@ -95,6 +100,22 @@ fun StatsScreen() {
             }
 
             Spacer(Modifier.height(14.dp))
+
+            // —— 2.7：MONEY / DAYS 两大标签 ——
+            ModuleTabs(tab) {
+                tab = it
+                expanded = null
+            }
+
+            // DAYS 标签：时间区间与金额口径都不适用，直接展示事件统计
+            if (tab == "days") {
+                Spacer(Modifier.height(12.dp))
+                DaysStatsSection(s)
+                Spacer(Modifier.height(16.dp))
+                return@Column
+            }
+
+            Spacer(Modifier.height(12.dp))
 
             // —— 区间切换 ——
             RangePicker(range) {
@@ -430,8 +451,7 @@ private fun StatRange.boundsText(today: LocalDate): String {
 
 /** 区间切换：四格等宽，选中项整块上浮 + 金色描边。 */
 @Composable
-private fun RangePicker(current: StatRange, onPick: (StatRange) -> Unit) {
-    Row(
+private fun RangePicker(current: StatRange, onPick: (StatRange) -> Unit) {    Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
@@ -568,5 +588,232 @@ private fun YearBars(months: List<com.haofan.xiaoxinxin.core.MonthStat>, ot: Boo
         labels = months.map { "${it.month.takeLast(2)}月" },
         highlight = months.indexOfFirst { it.month == now.toString() },
         color = if (ot) XC.orange else XC.gold,
+    )
+}
+
+/** 2.7：MONEY / DAYS 两大标签，两格等宽分段，样式与区间切换一脉相承。 */
+@Composable
+private fun ModuleTabs(current: String, onPick: (String) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(XC.fill)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        listOf("money" to "MONEY · 薪酬", "days" to "DAYS · 日子").forEach { (key, label) ->
+            val sel = key == current
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(
+                        if (sel) Brush.verticalGradient(listOf(XC.goldHi, XC.gold))
+                        else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                    )
+                    .liquidPress(
+                        onClick = { onPick(key) },
+                        shape = RoundedCornerShape(11.dp),
+                    )
+                    .padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    color = if (sel) XC.onGold else XC.textDim,
+                    fontSize = 12.5.sp,
+                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
+                    letterSpacing = 0.5.sp,
+                )
+            }
+        }
+    }
+}
+
+/** 细分条：轨道 + 单色填充，DAYS 标签里给每个事件画进度。 */
+@Composable
+private fun MiniTrack(ratio: Double, accent: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(XC.trackFill),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(ratio.coerceIn(0.0, 1.0).toFloat().coerceAtLeast(0.02f))
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(accent),
+        )
+    }
+}
+
+/**
+ * 2.7：DAYS 标签正文 —— 全部倒计时 + 全部纪念日一览，
+ * 每个事件一行：名称、主值（剩余 / 累计天数）、说明与进度条。
+ * 当前事件排在最前并带主色高亮。
+ */
+@Composable
+private fun DaysStatsSection(s: EarnState) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // —— 倒计时 ——
+        GlassCard(Modifier.fillMaxWidth(), radius = 24) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("倒计时", color = XC.text, fontSize = 13.sp, fontWeight = W500)
+                    Spacer(Modifier.weight(1f))
+                    Text("${s.countdowns.size} 个事件", color = XC.textFaint, fontSize = 10.5.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                if (s.countdowns.isEmpty()) {
+                    EmptyDaysHint("还没有倒计时。进 Your Days · 倒计时 → 事件管理 → 新增。")
+                } else {
+                    val sorted = s.countdowns.sortedByDescending { it.id == s.activeCountdownId }
+                    sorted.forEach { item ->
+                        val p = countdownProgress(item)
+                        val active = item.id == s.activeCountdownId
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (active) {
+                                    Box(
+                                        Modifier.size(6.dp).clip(RoundedCornerShape(3.dp))
+                                            .background(XC.gold),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(
+                                    item.name.ifEmpty { "未命名" },
+                                    color = XC.text,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    when {
+                                        p == null -> "--"
+                                        p.expired -> "已到"
+                                        item.mode == "percent" -> percentText(p.ratio, 0)
+                                        else -> "${p.daysLeft} 天"
+                                    },
+                                    color = XC.gold,
+                                    fontSize = 14.sp,
+                                    fontWeight = W500,
+                                    fontFamily = NumFont,
+                                )
+                            }
+                            if (p != null) {
+                                Spacer(Modifier.height(6.dp))
+                                MiniTrack(
+                                    p.ratio,
+                                    if (p.expired) XC.orange else XC.gold,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    if (p.expired)
+                                        "${item.name} 已到期 · 累计 ${p.elapsedDays} 天"
+                                    else
+                                        "${p.targetKey} 目标 · 已走 ${percentText(p.ratio, 0)}",
+                                    color = XC.textFaint,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        if (item != sorted.last()) {
+                            Box(Modifier.fillMaxWidth().height(0.7.dp).background(XC.line))
+                        }
+                    }
+                }
+            }
+        }
+
+        // —— 纪念日 ——
+        GlassCard(Modifier.fillMaxWidth(), radius = 24) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("纪念日", color = XC.text, fontSize = 13.sp, fontWeight = W500)
+                    Spacer(Modifier.weight(1f))
+                    Text("${s.recordDays.size} 个事件", color = XC.textFaint, fontSize = 10.5.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                if (s.recordDays.isEmpty()) {
+                    EmptyDaysHint("还没有纪念日。进 Your Days · 纪念日 → 事件管理 → 新增。")
+                } else {
+                    val sorted = s.recordDays.sortedByDescending { it.id == s.activeRecordDayId }
+                    sorted.forEach { item ->
+                        val p = recordDayProgress(item)
+                        val active = item.id == s.activeRecordDayId
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (active) {
+                                    Box(
+                                        Modifier.size(6.dp).clip(RoundedCornerShape(3.dp))
+                                            .background(XC.teal),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(
+                                    item.name.ifEmpty { "未命名" },
+                                    color = XC.text,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    p?.let { "${it.elapsedDays} 天" } ?: "--",
+                                    color = XC.teal,
+                                    fontSize = 14.sp,
+                                    fontWeight = W500,
+                                    fontFamily = NumFont,
+                                )
+                            }
+                            if (p != null) {
+                                Spacer(Modifier.height(6.dp))
+                                MiniTrack(p.ratio, XC.teal)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    if (p.started)
+                                        "从 ${p.startKey} 起 · 累计 ${p.span.shortText}"
+                                    else
+                                        "起始日 ${p.startKey} 还没到",
+                                    color = XC.textFaint,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                        if (item != sorted.last()) {
+                            Box(Modifier.fillMaxWidth().height(0.7.dp).background(XC.line))
+                        }
+                    }
+                }
+            }
+        }
+
+        Text(
+            "倒计时按目标日倒数，纪念日从起始日累计；当前事件在 Your Days 页切换。",
+            color = XC.textFaint,
+            fontSize = 10.5.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun EmptyDaysHint(text: String) {
+    Text(
+        text,
+        color = XC.textFaint,
+        fontSize = 11.5.sp,
+        lineHeight = 18.sp,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        textAlign = TextAlign.Center,
     )
 }

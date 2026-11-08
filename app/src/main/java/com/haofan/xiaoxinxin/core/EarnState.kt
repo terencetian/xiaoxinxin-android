@@ -408,8 +408,7 @@ enum class StatusBarKind(val key: String, val group: String, val title: String, 
     }
 }
 
-/** 一个显示项渲染出来的一段文案，供通知标题 / 悬浮岛副标题复用。 */
-fun statusBarText(s: EarnState, kind: StatusBarKind, at: Long = System.currentTimeMillis()): String =
+/** 一个显示项渲染出来的一段文案，供通知标题 / 悬浮岛副标题复用。 */fun statusBarText(s: EarnState, kind: StatusBarKind, at: Long = System.currentTimeMillis()): String =
     when (kind) {
         StatusBarKind.MONEY_TODAY ->
             if (s.privacyActive) "今日 ${percentText(s.todayHoursRatio, 0)}"
@@ -432,3 +431,111 @@ fun statusBarText(s: EarnState, kind: StatusBarKind, at: Long = System.currentTi
             if (p == null) "纪念日 --" else "${item.name} ${p.elapsedDays} 天"
         } ?: "纪念日 --"
     }
+
+/**
+ * 悬浮岛 / 通知里一格内容的统一数据源（2.7）。
+ * 6 种显示项共用这套结构：大字 value、说明 caption、副行 sub、进度 ratio。
+ * 通知文案与悬浮药丸都从这里取，保证两处口径永远一致。
+ */
+data class WidgetCell(
+    val label: String,     // 小标题：今日已赚 / 倒计时剩余 …
+    val value: String,     // 大字主值：¥123.45 / 37 天 / 45%
+    val caption: String,   // 说明行：距离 生日 · 2026-12-25
+    val sub: String,       // 副行：已工作 2h 15m · 45%
+    val ratio: Double,     // 进度条 0..1
+    val isMoney: Boolean,  // 是否金额系（工作状态徽标只在金额系显示）
+)
+
+fun widgetCell(s: EarnState, kind: StatusBarKind, at: Long = System.currentTimeMillis()): WidgetCell {
+    val mins = s.workedMinutes(at)
+    val workTail = if (s.working) "已工作 ${mins / 60}h${mins % 60}m" else "未计费 · 点开打卡"
+    return when (kind) {
+        StatusBarKind.MONEY_TODAY -> WidgetCell(
+            label = "今日已赚",
+            value = if (s.privacyActive) percentText(s.todayHoursRatio, 0)
+            else s.displayMoney(s.displayEarned(at)),
+            caption = when {
+                s.privacyActive -> "今日进度 · 隐私模式"
+                s.overtimeNow(at) -> "加班计费中 · 今日已到账"
+                s.working -> "正在进账 · 今日已到账"
+                else -> "今日已到账"
+            },
+            sub = workTail + if (s.working) " · ${fmt(s.progress(at) * 100, 0)}%" else "",
+            ratio = s.progress(at),
+            isMoney = true,
+        )
+
+        StatusBarKind.MONEY_MONTH -> WidgetCell(
+            label = "本月累计",
+            value = if (s.privacyActive) percentText(s.monthMoneyRatio, 0)
+            else s.displayMoney(s.monthEarned(at)),
+            caption = if (s.privacyActive) "本月进度 · 隐私模式" else "本月累计进账",
+            sub = "本月进度 ${percentText(s.monthMoneyRatio, 0)} · 应出勤 ${s.workDays} 天",
+            ratio = s.monthMoneyRatio.coerceIn(0.0, 1.0),
+            isMoney = true,
+        )
+
+        StatusBarKind.MONEY_TODAY_PCT -> WidgetCell(
+            label = "今日进度",
+            value = percentText(s.todayHoursRatio, 0),
+            caption = "今日工时进度",
+            sub = workTail + if (s.working) " · 计划 ${fmt(s.effectiveHours, 1)}h" else "",
+            ratio = s.todayHoursRatio.coerceIn(0.0, 1.0),
+            isMoney = true,
+        )
+
+        StatusBarKind.MONEY_MONTH_PCT -> WidgetCell(
+            label = "本月进度",
+            value = percentText(s.monthHoursRatio, 0),
+            caption = "本月工时进度",
+            sub = "本月 ${if (s.privacyActive) "--" else "¥" + fmt(s.monthEarned(at))} · 应出勤 ${s.workDays} 天",
+            ratio = s.monthHoursRatio.coerceIn(0.0, 1.0),
+            isMoney = true,
+        )
+
+        StatusBarKind.DAYS_COUNTDOWN -> {
+            val item = s.activeCountdown
+            val p = item?.let { countdownProgress(it) }
+            if (item == null || p == null) WidgetCell(
+                label = "倒计时剩余",
+                value = "--",
+                caption = "还没有倒计时",
+                sub = "进 App → 倒计时 → 事件管理",
+                ratio = 0.0,
+                isMoney = false,
+            )
+            else WidgetCell(
+                label = "倒计时剩余",
+                value = if (p.expired) "已到"
+                else if (item.mode == "percent") percentText(p.ratio, 0)
+                else "${p.daysLeft} 天",
+                caption = if (p.expired) "${item.name} · 已到期"
+                else "距离 ${item.name} · ${p.targetKey}",
+                sub = if (p.expired) "累计 ${p.elapsedDays} 天" else "已走 ${percentText(p.ratio, 0)}",
+                ratio = p.ratio,
+                isMoney = false,
+            )
+        }
+
+        StatusBarKind.DAYS_RECORD -> {
+            val item = s.activeRecordDay
+            val p = item?.let { recordDayProgress(it) }
+            if (item == null || p == null) WidgetCell(
+                label = "纪念日累计",
+                value = "--",
+                caption = "还没有纪念日",
+                sub = "进 App → 纪念日 → 事件管理",
+                ratio = 0.0,
+                isMoney = false,
+            )
+            else WidgetCell(
+                label = "纪念日累计",
+                value = "${p.elapsedDays} 天",
+                caption = if (p.started) "${item.name} · 已相伴" else "${item.name} · 尚未开始",
+                sub = if (p.started) "累计 ${p.span.shortText}" else "起始日 ${p.startKey}",
+                ratio = p.ratio,
+                isMoney = false,
+            )
+        }
+    }
+}

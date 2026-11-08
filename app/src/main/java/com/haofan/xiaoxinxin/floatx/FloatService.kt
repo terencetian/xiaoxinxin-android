@@ -33,7 +33,11 @@ import com.haofan.xiaoxinxin.R
 import com.haofan.xiaoxinxin.core.EarnRepo
 import com.haofan.xiaoxinxin.core.EarnState
 import com.haofan.xiaoxinxin.core.LiveUpdate
+import com.haofan.xiaoxinxin.core.StatusBarKind
+import com.haofan.xiaoxinxin.core.WidgetTheme
 import com.haofan.xiaoxinxin.core.fmt
+import com.haofan.xiaoxinxin.core.widgetCell
+import com.haofan.xiaoxinxin.ui.widgetColorsOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -119,17 +123,42 @@ class FloatService : Service() {
         computeMetrics()
         ensureChannel()
         startForeground(NOTIF_ID, buildNotification(EarnRepo.state.value))
+        applyWidgetTheme(EarnRepo.state.value)
         if (EarnRepo.state.value.floatEnabled) addOverlay()
         ticker = scope.launch {
             while (true) {
                 val s = EarnRepo.state.value
                 EarnRepo.tick()
-                view?.update(s)
+                applyWidgetTheme(s)
+                view?.update(s, currentKind(s))
                 // 通知每 3 秒刷一次：金额每秒只涨 0.6 分，刷太快只是耗电
                 if (++ticks % 3 == 0) notify(buildNotification(EarnRepo.state.value))
                 delay(1000)
             }
         }
+    }
+
+    /**
+     * 部件配色跟随主题（2.7）：每秒比对主题指纹，变了就把新颜色包推给
+     * WidgetTheme，悬浮窗下一帧、通知下次重建就换装。ui 层不在线也能算，
+     * 因为颜色直接由 EarnState 推导，不依赖 Compose 是否活过。
+     */
+    private fun applyWidgetTheme(s: EarnState) {
+        val c = widgetColorsOf(s)
+        if (c.sig != WidgetTheme.current.sig) WidgetTheme.apply(c)
+    }
+
+    /**
+     * 当前该显示哪一项：不开轮播或只有一项时固定；开轮播按
+     * statusBarRotateSeconds 周期轮换。用 elapsedRealtime 派生下标，
+     * 无状态 —— 改设置立即生效，服务重启也不重置。
+     */
+    private fun currentKind(s: EarnState): StatusBarKind {
+        val kinds = StatusBarKind.parse(s.statusBarKinds)
+        if (kinds.size == 1 || !s.statusBarRotate) return kinds.first()
+        val sec = s.statusBarRotateSeconds.coerceIn(2, 60)
+        val idx = (SystemClock.elapsedRealtime() / 1000L / sec).toInt() % kinds.size
+        return kinds[idx]
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -467,18 +496,21 @@ class FloatService : Service() {
             this, 1, Intent(this, FloatService::class.java).setAction("stop"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val money = "¥" + fmt(s.displayEarned())
-        val mins = s.workedMinutes()
-        val title = getString(if (s.working) R.string.notif_title_tracking else R.string.notif_title_idle)
-        val text = if (s.working) "$money · 已工作 ${mins / 60}h${mins % 60}m" else "点开打卡开始计费"
+        // 2.7：通知与悬浮岛共用同一套显示项（含 DAYS 系）与同一份 WidgetCell 数据，
+        // 轮播开在设置页「状态栏与通知」，两边节奏一致。
+        val cell = widgetCell(s, currentKind(s))
+        val colors = WidgetTheme.current
+        val title = if (cell.isMoney && s.working) "${cell.label} · 计费中" else cell.label
+        val body = if (cell.sub.isEmpty()) cell.caption else "${cell.caption} · ${cell.sub}"
 
         // Android 16：走系统「实时更新」，满足条件会被提升成岛。
         // 只有用户自己打开了「灵动岛」开关才这么发 —— 否则就是一条普通常驻通知。
         if (s.islandEnabled && Build.VERSION.SDK_INT >= 36 && LiveUpdate.allowed(this)) {
             return LiveUpdate.build(
-                this, CHANNEL_ID, title, text, money,
-                (s.progress() * 100).toInt(), pi,
+                this, CHANNEL_ID, title, body, cell.value,
+                (cell.ratio * 100).toInt(), pi,
             ) {
+                setColor(colors.accent)
                 addAction(
                     Notification.Action.Builder(
                         Icon.createWithResource(this@FloatService, R.drawable.ic_stat_money),
@@ -492,7 +524,9 @@ class FloatService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_money)
             .setContentTitle(title)
-            .setContentText(text)
+            .setContentText(body)
+            // 主题重点色：着色小图标；配色跟 App 内主题走
+            .setColor(colors.accent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -517,13 +551,18 @@ class FloatingView(ctx: Context) : View(ctx) {
 
     enum class Mode { MINI, PILL, CARD }
 
-    private companion object {
-        val GOLD = 0xFFFFD257.toInt()
-        val SUB = 0x8CF2F5FA.toInt()
-        val LABEL = 0xB3FFD257.toInt()
-        val FAINT = 0x66F2F5FA.toInt()
-        val TRACK = 0x26FFFFFF
-    }
+    // —— 2.7：颜色与内容全部动态化 ——
+    // 颜色从 WidgetTheme.current 取（由 FloatService 随主题推送）；
+    // 内容从 widgetCell(state, kind) 取，kind 由服务按轮播节奏切换。
+
+    var kind: StatusBarKind = StatusBarKind.MONEY_TODAY
+        set(v) {
+            field = v
+            cell = widgetCell(state, v)
+            invalidate()
+        }
+
+    private var cell: com.haofan.xiaoxinxin.core.WidgetCell = widgetCell(EarnState(), kind)
 
     var mode: Mode = Mode.PILL
         set(v) {
@@ -548,49 +587,35 @@ class FloatingView(ctx: Context) : View(ctx) {
     private fun sp(v: Float) = v * sd
 
     /**
-     * 纯黑底。系统岛在 OLED 上就是用纯黑跟挖孔、边框融成一体，
-     * 所以这里不能再用半透明深蓝 —— 那会显得像「一个浮在外面的卡片」。
+     * 2.7 起底色不再固定纯黑：跟随 App 主题的背景色（含背景透明度），
+     * 系统岛质感交给描边和文字层次来撑。颜色每帧从 WidgetTheme.current 取，
+     * 主题一换下一帧就变。
      */
-    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF000000.toInt() }
+    private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = 0.7f * d
-        color = 0x33FFFFFF
-    }
-
-    /** 内侧一圈极淡高光：让纯黑药丸在深色壁纸上也有轮廓，不至于糊成一团。 */
-    private val innerEdgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1f * d
-        color = 0x14FFFFFF
     }
     private val moneyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = GOLD
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
     }
-    private val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = SUB }
+    private val subPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = LABEL
         typeface = Typeface.DEFAULT
     }
-    private val faintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = FAINT }
-    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = TRACK }
-    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GOLD }
-    private val goldFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GOLD }
+    private val faintPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val accentFill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rect = RectF()
 
-    /**
-     * 按比例缩放颜色自身的 alpha。
-     * 注意不能用 Paint.setAlpha —— 它会把颜色里的 alpha 整个覆盖掉，
-     * 于是 15% 白的轨道会长成一条纯白实线。
-     */
-    private fun tint(base: Int, f: Float): Int {
-        val a = ((base ushr 24) * f.coerceIn(0f, 1f)).toInt().coerceIn(0, 255)
-        return (base and 0x00FFFFFF) or (a shl 24)
-    }
+    /** 当前帧要用的颜色包。 */
+    private val wc get() = WidgetTheme.current
 
-    fun update(s: EarnState) {
+    fun update(s: EarnState, k: StatusBarKind = kind) {
         state = s
+        cell = widgetCell(s, k)
+        kind = k
         invalidate()
     }
 
@@ -602,28 +627,36 @@ class FloatingView(ctx: Context) : View(ctx) {
         val h = height.toFloat() - bottomPad
         if (w <= 0f || h <= 0f) return
         val m = morph
+        val c = wc
+
+        // 每帧从颜色包取色：主题一换，下一帧就跟着变
+        bgPaint.color = c.bg
+        edgePaint.color = c.edge
+        subPaint.color = c.textDim
+        labelPaint.color = c.accent
+        faintPaint.color = c.textFaint
+        trackPaint.color = c.track
+        dotPaint.color = c.accent
+        accentFill.color = c.accent
 
         // 药丸圆角：收起来是全圆角，展开是 26dp
         val r = if (mode == Mode.MINI) h / 2 else lerp(h / 2, px(26f), m)
         rect.set(0f, 0f, w, h)
         canvas.drawRoundRect(rect, r, r, bgPaint)
         rect.set(d, d, w - d, h - d)
-        canvas.drawRoundRect(rect, (r - d).coerceAtLeast(0f), (r - d).coerceAtLeast(0f), innerEdgePaint)
-        rect.set(0.4f, 0.4f, w - 0.4f, h - 0.4f)
-        canvas.drawRoundRect(rect, r, r, edgePaint)
+        canvas.drawRoundRect(rect, (r - d).coerceAtLeast(0f), (r - d).coerceAtLeast(0f), edgePaint)
 
-        val money = "¥" + fmt(state.displayEarned())
+        val value = cell.value
         val pad = px(16f)
 
         if (mode == Mode.MINI) {
-            moneyPaint.textSize = sp(14f)
-            moneyPaint.color = GOLD
-            val mw = moneyPaint.measureText(money)
-            canvas.drawText(money, (w - mw) / 2f, h / 2f + moneyPaint.textSize * 0.36f, moneyPaint)
+            moneyPaint.textSize = fitText(moneyPaint, value, w - px(12f), sp(14f))
+            val mw = moneyPaint.measureText(value)
+            canvas.drawText(value, (w - mw) / 2f, h / 2f + moneyPaint.textSize * 0.36f, moneyPaint)
             return
         }
 
-        // —— 收起态：呼吸金点 + 金额，整体居中，像岛里的一条实时读数 ——
+        // —— 收起态：呼吸点 + 当前显示项的值，整体居中，像岛里的一条实时读数 ——
         val pillF = 1f - m
         if (pillF > 0.02f) {
             var dotR = px(2.8f)
@@ -632,52 +665,53 @@ class FloatingView(ctx: Context) : View(ctx) {
                 val phase = (SystemClock.uptimeMillis() % 1600L) / 1600f
                 dotR *= 0.8f + 0.35f * kotlin.math.sin(phase * 6.283f).toFloat()
             }
-            moneyPaint.textSize = lerp(sp(15f), sp(27f), m)
-            moneyPaint.color = tint(GOLD, pillF)
-            val mw = moneyPaint.measureText(money)
+            moneyPaint.textSize = fitText(moneyPaint, value, w - dotR * 2 - px(20f), sp(15f))
+            val mw = moneyPaint.measureText(value)
             val gap = px(7f)
             val left = (w - (dotR * 2 + gap + mw)) / 2f
             val base = h / 2f + moneyPaint.textSize * 0.36f
-            dotPaint.color = tint(GOLD, pillF)
             canvas.drawCircle(left + dotR, h / 2f, dotR, dotPaint)
-            canvas.drawText(money, left + dotR * 2 + gap, base, moneyPaint)
+            canvas.drawText(value, left + dotR * 2 + gap, base, moneyPaint)
         }
 
         // —— 展开态 ——
         if (m > 0.02f) {
             labelPaint.textSize = sp(10.5f)
-            labelPaint.color = tint(LABEL, m)
-            canvas.drawText("今日已到账", pad, px(28f), labelPaint)
+            canvas.drawText(cell.label, pad, px(28f), labelPaint)
 
             faintPaint.textSize = sp(10f)
-            faintPaint.color = tint(FAINT, m)
-            val month = "本月 ¥" + fmt(state.monthEarned())
-            canvas.drawText(month, w - pad - faintPaint.measureText(month), px(28f), faintPaint)
+            val cap = fitText(faintPaint, cell.caption, w - pad * 2 - labelPaint.measureText(cell.label) - px(8f), sp(10f))
+            canvas.drawText(cell.caption, w - pad - faintPaint.measureText(cell.caption), px(28f), faintPaint)
 
-            moneyPaint.textSize = lerp(sp(15f), sp(27f), m)
-            moneyPaint.color = tint(GOLD, m)
-            canvas.drawText(money, pad, lerp(h / 2f, px(60f), m), moneyPaint)
+            moneyPaint.textSize = fitText(moneyPaint, value, w - pad * 2, lerp(sp(15f), sp(27f), m))
+            canvas.drawText(value, pad, lerp(h / 2f, px(60f), m), moneyPaint)
 
             subPaint.textSize = sp(10.5f)
-            subPaint.color = tint(SUB, m)
-            val mins = state.workedMinutes()
-            val sub = if (state.working)
-                "已工作 ${mins / 60}h${mins % 60}m · ${fmt(state.progress() * 100, 0)}%"
-            else "未计费 · 点开打卡"
-            canvas.drawText(sub, pad, px(84f), subPaint)
+            val sub = fitText(subPaint, cell.sub, w - pad * 2, sp(10.5f))
+            canvas.drawText(cell.sub, pad, px(84f), subPaint)
 
             // 进度条
             val barH = px(4f)
             val by = h - px(20f)
-            trackPaint.color = tint(TRACK, m)
             val track = RectF(pad, by, w - pad, by + barH)
             canvas.drawRoundRect(track, barH / 2, barH / 2, trackPaint)
-            val p = state.progress().toFloat().coerceIn(0f, 1f)
+            val p = cell.ratio.toFloat().coerceIn(0f, 1f)
             if (p > 0f) {
-                goldFill.color = tint(GOLD, m)
                 val fill = RectF(pad, by, pad + track.width() * p, by + barH)
-                canvas.drawRoundRect(fill, barH / 2, barH / 2, goldFill)
+                canvas.drawRoundRect(fill, barH / 2, barH / 2, accentFill)
             }
         }
+    }
+
+    /** 长文本自适应：超出可用宽度就逐级缩字号，最低缩到基准的 60%。 */
+    private fun fitText(paint: Paint, text: String, maxW: Float, base: Float): Float {
+        var size = base
+        paint.textSize = size
+        val floor = base * 0.6f
+        while (paint.measureText(text) > maxW && size > floor) {
+            size -= base * 0.05f
+            paint.textSize = size
+        }
+        return size
     }
 }

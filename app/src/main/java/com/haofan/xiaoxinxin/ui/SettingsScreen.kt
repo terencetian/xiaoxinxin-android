@@ -63,6 +63,7 @@ private val ALL_GROUPS = listOf(
 )
 
 private val RELEASE_HISTORY = listOf(
+    Triple("2.7.0", "2026-11-08", "悬浮岛 / 通知 / 灵动岛支持 MONEY·DAYS 轮播显示（设置页可配显示项与间隔）；三处配色跟随主题实时换装；统计页新增 MONEY / DAYS 双标签"),
     Triple("2.6.2", "2026-11-08", "版本号与 macOS 对齐（Build 43）；默认主题改为天蓝、液态玻璃按压反馈、玻璃滑块、引导页、底栏不再遮挡卡片"),
     Triple("2.0.0", "2026-11-08", "对齐 macOS 2.0：三模块分页、四套主题、19 组设置、隐私模式、事件管理"),
     Triple("1.9.10", "2026-11-06", "首页版本号改读 BuildConfig"),
@@ -696,7 +697,9 @@ fun SettingsScreen(onOpenDetail: (DetailMode) -> Unit = {}) {
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Hint("至少保留一项。多选时可开启轮播，通知栏每隔几秒换一项。")
+            Hint("至少保留一项。多选时可开启轮播：通知栏、悬浮药丸、系统岛（灵动岛）按同一节奏轮换显示。")
+            Spacer(Modifier.height(6.dp))
+            Hint("这三处配色跟随 App 当前主题（含自定义颜色与透明度），换主题立即换装。")
             Spacer(Modifier.height(10.dp))
             ToggleRow("多选时轮播", "按上面的顺序循环显示", s.statusBarRotate) {
                 EarnRepo.setStatusBarRotate(it)
