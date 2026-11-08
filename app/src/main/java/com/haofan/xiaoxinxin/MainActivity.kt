@@ -30,6 +30,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 任何未捕获异常先落盘到「下载」文件夹再交给系统 —— HyperOS 复现闪退不用连电脑
+        com.haofan.xiaoxinxin.core.CrashGuard.install(this)
         EarnRepo.init(this)
         // App 启动也重排一次自动上班闹钟：用户改了上班时间但忘了重启 App 的情况也能对上
         com.haofan.xiaoxinxin.core.AutoPunch.reschedule(this)
