@@ -1,29 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 状态栏单色图标：¥ 符号。岛上的 tracker icon 直接用它，必须纯白纯透明。 -->
+<!-- 状态栏单色图标：¥｜沙漏（对齐 macOS 2.5.2+ 新版图标）。通知小图标必须纯白纯透明。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- 左：¥ -->
     <path
-        android:pathData="M7.2,5.5 L12,11.6 L16.8,5.5"
+        android:pathData="M7.6,6.8 L10.5,11.1 L13.3,6.8"
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.9"
+        android:strokeWidth="1.7"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
     <path
-        android:pathData="M12,11.6 L12,19"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.9"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M8.6,14.1 L15.4,14.1"
+        android:pathData="M10.5,11.1 L10.5,17.2"
         android:strokeColor="#FFFFFFFF"
         android:strokeWidth="1.7"
         android:strokeLineCap="round" />
     <path
-        android:pathData="M8.6,16.9 L15.4,16.9"
+        android:pathData="M7.3,12.6 L13.6,12.6"
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="1.7"
+        android:strokeWidth="1.5"
         android:strokeLineCap="round" />
+    <path
+        android:pathData="M7.3,14.7 L13.6,14.7"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    <!-- 右：沙漏 -->
+    <path
+        android:pathData="M16.1,7 L20.4,7 M16.1,17 L20.4,17"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M16.6,7 C16.6,10.6 20,11.7 20,12 C20,12.3 16.6,13.4 16.6,17"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M20,7 C20,10.6 16.6,11.7 16.6,12 C16.6,12.3 20,13.4 20,17"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>
