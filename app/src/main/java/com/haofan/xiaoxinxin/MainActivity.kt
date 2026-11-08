@@ -50,6 +50,43 @@ class MainActivity : ComponentActivity() {
             val state by EarnRepo.state.collectAsState()
             val palette = buildPalette(AppTheme.of(state.themeId), state.themeAccent, state.themeAlpha, state.themeBg, state.themeText)
             val view = LocalView.current
+            // 上次异常退出的诊断报告（原生崩溃 / ANR / 被系统杀，CrashGuard 抓不到的那类）
+            var exitReport by remember { mutableStateOf<com.haofan.xiaoxinxin.core.LastExit.Report?>(null) }
+            LaunchedEffect(Unit) {
+                val r = com.haofan.xiaoxinxin.core.LastExit.collect(this@MainActivity)
+                if (r != null && !com.haofan.xiaoxinxin.core.LastExit.wasReported(this@MainActivity, r)) {
+                    com.haofan.xiaoxinxin.core.LastExit.saveToDownloads(this@MainActivity, r)
+                    com.haofan.xiaoxinxin.core.LastExit.markReported(this@MainActivity, r)
+                    exitReport = r
+                }
+            }
+            exitReport?.let { r ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { exitReport = null },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            val cm = getSystemService(android.content.ClipboardManager::class.java)
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("xiaoxinxin-exit", r.summary()))
+                            exitReport = null
+                        }) { androidx.compose.material3.Text("复制报告") }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { exitReport = null }) {
+                            androidx.compose.material3.Text("知道了") }
+                    },
+                    title = { androidx.compose.material3.Text("上次异常退出记录") },
+                    text = {
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            androidx.compose.material3.Text(
+                                r.summary(),
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                maxLines = 12,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                )
+            }
 
             // 配色写回全局单例：各处 XC.xxx 读的是 state，会自动重组。
             // 必须放在 SideEffect 里，组合期间改 state 会触发重组冲突。
