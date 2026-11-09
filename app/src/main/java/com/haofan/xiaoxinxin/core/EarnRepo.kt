@@ -68,6 +68,7 @@ object EarnRepo {
         workStart = p.getString("workStart", "09:00") ?: "09:00",
         workEnd = p.getString("workEnd", "18:00") ?: "18:00",
         breakMin = p.getString("breakMin", "60") ?: "60",
+        breakStart = p.getString("breakStart", "12:00") ?: "12:00",
         clockInAt = if (p.getLong("clockInAt", -1L) >= 0) p.getLong("clockInAt", -1L) else null,
         baseEarned = p.getFloat("baseEarned", 0f).toDouble(),
         workedBeforeSession = p.getFloat("workedBeforeSession", 0f).toDouble(),
@@ -168,6 +169,7 @@ object EarnRepo {
             .putString("workStart", s.workStart)
             .putString("workEnd", s.workEnd)
             .putString("breakMin", s.breakMin)
+            .putString("breakStart", s.breakStart)
             .putLong("clockInAt", s.clockInAt ?: -1L)
             .putFloat("baseEarned", s.baseEarned.toFloat())
             .putFloat("workedBeforeSession", s.workedBeforeSession.toFloat())
@@ -381,17 +383,18 @@ object EarnRepo {
         val now = System.currentTimeMillis()
         val s = _state.value
         val start = s.clockInAt ?: return
-        val elapsed = ((now - start).coerceAtLeast(0L)) / 1000.0
+        val elapsed = ((now - start).coerceAtLeast(0L)) / 1000.0   // 墙钟：加班时长按实际待在公司算
+        val billable = s.billableElapsed(start, now)               // 计费：扣掉午休
         val isOT = s.overtimeNow(now)
         val addOT = if (isOT) elapsed else 0.0
-        val newBase = s.baseEarned + elapsed * s.ratePerSec
+        val newBase = s.baseEarned + billable * s.ratePerSec
         val t = timeStr(nowLocal(now))
         val otMin = ((s.overtimeSeconds + addOT) / 60).toInt()
         update {
             it.copy(
                 clockInAt = null,
                 baseEarned = newBase,
-                workedBeforeSession = it.workedBeforeSession + elapsed,
+                workedBeforeSession = it.workedBeforeSession + billable,
                 overtimeSeconds = it.overtimeSeconds + addOT,
                 logText = if (auto) "$t 已到下班时间，自动打卡下班，今日共到账 ¥${fmt(newBase)}"
                 else "$t 下班打卡，今日共到账 ¥${fmt(newBase)}" + if (otMin > 0) "（含加班 $otMin 分钟）" else "",
@@ -406,7 +409,7 @@ object EarnRepo {
         val target = (hours.coerceAtLeast(0.0)) * 3600
         if (s.clockInAt != null) {
             // 计费中：保留当前段起点，只把「之前已工作」部分调整到目标值
-            val running = ((now - s.clockInAt).coerceAtLeast(0L)) / 1000.0
+            val running = s.billableElapsed(s.clockInAt, now)
             val before = (target - running).coerceAtLeast(0.0)
             update {
                 it.copy(
@@ -477,6 +480,7 @@ object EarnRepo {
     fun setSalary(v: String) = update { it.copy(salaryText = v.filter { c -> c.isDigit() || c == '.' }) }
     fun setWorkDays(v: String) = update { it.copy(workDaysText = v.filter { c -> c.isDigit() }.take(2)) }
     fun setBreakMin(v: String) = update { it.copy(breakMin = v.filter { c -> c.isDigit() }.take(3)) }
+    fun setBreakStart(v: String) = update { it.copy(breakStart = v.take(5)) }
     fun setWorkStart(v: String) = update { it.copy(workStart = v) }
     fun setWorkEnd(v: String) = update { it.copy(workEnd = v) }
 

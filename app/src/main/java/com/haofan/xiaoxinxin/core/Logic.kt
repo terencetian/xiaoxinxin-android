@@ -166,6 +166,68 @@ fun shiftStartTime(now: LocalDateTime, startStr: String, endStr: String): LocalD
 /** 按 yyyy-MM-dd 取当日 0 点，用于流水落账。 */
 fun dayStart(key: String): LocalDateTime = LocalDate.parse(key).atStartOfDay()
 
+// MARK: - 午休窗口与可计费时长（三端同口径）
+//
+// 以前只有「休息时长」没有起点，结果分母扣了休息、分子按墙钟跑：
+// 9:00–18:00 休 60 分在 16:38 会算成 95%，实际应约 83%，下班还会跑到 112%。
+
+private fun clockTime(s: String): LocalTime? {
+    val p = s.trim().split(":")
+    if (p.size != 2) return null
+    val h = p[0].toIntOrNull() ?: return null
+    val m = p[1].toIntOrNull() ?: return null
+    if (h < 0 || h >= 24 || m < 0 || m >= 60) return null
+    return LocalTime.of(h, m)
+}
+
+/** 班次内的休息区间。按用户填的「休息开始」定位；落在班次外或非法时回退「有效工时对半分」。 */
+fun breakWindow(shiftStart: LocalDateTime, shiftEnd: LocalDateTime,
+                breakStartStr: String, breakMinutes: Double): Pair<LocalDateTime, LocalDateTime> {
+    val span = java.time.Duration.between(shiftStart, shiftEnd).seconds.toDouble()
+    if (span <= 0) return shiftStart to shiftStart
+    val brk = (breakMinutes.coerceAtLeast(0.0) * 60).coerceAtMost(span)
+    if (brk <= 0) return shiftStart to shiftStart
+
+    val t = clockTime(breakStartStr)
+    var start = if (t != null) {
+        val cand = shiftStart.toLocalDate().atTime(t)
+        // 跨零点班次（22:00–06:00 休 02:00–03:00）：休息时刻比上班早 → 落到次日
+        if (cand.isBefore(shiftStart)) cand.plusDays(1) else cand
+    } else {
+        shiftStart.plusSeconds(((span - brk) / 2).toLong())
+    }
+    if (start.isBefore(shiftStart) || !start.isBefore(shiftEnd)) {
+        start = shiftStart.plusSeconds(((span - brk) / 2).toLong())
+    }
+    if (start.plusSeconds(brk.toLong()).isAfter(shiftEnd)) {
+        start = shiftEnd.minusSeconds(brk.toLong())
+    }
+    return start to start.plusSeconds(brk.toLong())
+}
+
+/** [from, to] 这段真实时间里真正计入工作的秒数：休息不计，班次外（提前到 / 加班）按 1:1 计。 */
+fun billableSeconds(from: Long, to: Long, startStr: String, endStr: String,
+                    breakStartStr: String, breakMinutes: Double): Double {
+    val wall = (to - from).coerceAtLeast(0L) / 1000.0
+    if (wall <= 0) return 0.0
+    val zone = java.time.ZoneId.systemDefault()
+    val fromL = java.time.Instant.ofEpochMilli(from).atZone(zone).toLocalDateTime()
+    val toL = java.time.Instant.ofEpochMilli(to).atZone(zone).toLocalDateTime()
+    val s0 = shiftStartTime(fromL, startStr, endStr) ?: return wall
+    val s1 = shiftEndTime(fromL, startStr, endStr) ?: return wall
+
+    fun overlap(a: LocalDateTime, b: LocalDateTime): Double {
+        val lo = if (fromL.isAfter(a)) fromL else a
+        val hi = if (toL.isBefore(b)) toL else b
+        if (!hi.isAfter(lo)) return 0.0
+        return java.time.Duration.between(lo, hi).seconds.toDouble()
+    }
+    val (bs, be) = breakWindow(s0, s1, breakStartStr, breakMinutes)
+    val inShift = overlap(s0, s1)
+    val worked = overlap(s0, bs) + overlap(be, s1)
+    return worked + (wall - inShift).coerceAtLeast(0.0)
+}
+
 // MARK: - 2.0 进度条统计内容
 //
 // 进度条不再绑死「今日已赚 ÷ 日薪」：所有口径统一算出一个 ratio（可 > 1，

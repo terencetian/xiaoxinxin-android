@@ -273,7 +273,13 @@ fun SettingsScreen(onOpenDetail: (DetailMode) -> Unit = {}) {
                 Box(Modifier.weight(0.9f)) { Field("休息", s.breakMin, { EarnRepo.setBreakMin(it) }, "分", KeyboardType.Number) }
             }
             Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                Box(Modifier.weight(1f)) { Field("休息从", s.breakStart, { EarnRepo.setBreakStart(it) }, "", KeyboardType.Text) }
+                Spacer(Modifier.weight(1.9f))
+            }
+            Spacer(Modifier.height(8.dp))
             Hint("实际计费 ${fmt(s.effectiveHours, 1)} 小时/天 · 支持跨零点班次（如 22:00–06:00）")
+            Hint("休息时段不计工时也不进账：进度在午休期间停住，下班时刚好 100%")
             Spacer(Modifier.height(11.dp))
             ToggleRow("到点自动下班", "下班时间一到自动停表；加班段落不会被切断", s.autoClockOut) {
                 EarnRepo.setAutoClockOut(it)

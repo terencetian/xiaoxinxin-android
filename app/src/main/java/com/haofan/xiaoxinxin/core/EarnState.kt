@@ -64,6 +64,8 @@ data class EarnState(
     val workStart: String = "09:00",
     val workEnd: String = "18:00",
     val breakMin: String = "60",
+    /** 午休开始时刻 HH:mm —— 只有时长没有起点，就没法把休息真从已过时间里扣掉 */
+    val breakStart: String = "12:00",
 
     val clockInAt: Long? = null,           // epoch millis；null = 未计费
     val baseEarned: Double = 0.0,          // 已结束计费段的累计金额
@@ -160,14 +162,19 @@ data class EarnState(
     val working: Boolean get() = clockInAt != null
 
     // ── 派生：金额与工时 ─────────────────────────────
+    /** [from, to] 内真正计入工作的秒数（剔除午休）。金额与工时都走这个口径。 */
+    fun billableElapsed(from: Long, to: Long = System.currentTimeMillis()): Double =
+        billableSeconds(from = from, to = to, startStr = workStart, endStr = workEnd,
+                        breakStartStr = breakStart, breakMinutes = (breakMin.toIntOrNull() ?: 60).toDouble())
+
     fun displayEarned(at: Long = System.currentTimeMillis()): Double {
         val start = clockInAt ?: return baseEarned
-        return baseEarned + (at - start).coerceAtLeast(0L) / 1000.0 * ratePerSec
+        return baseEarned + billableElapsed(start, at) * ratePerSec
     }
 
     fun workedSeconds(at: Long = System.currentTimeMillis()): Double {
         val start = clockInAt ?: return workedBeforeSession
-        return workedBeforeSession + (at - start).coerceAtLeast(0L) / 1000.0
+        return workedBeforeSession + billableElapsed(start, at)
     }
 
     fun workedMinutes(at: Long = System.currentTimeMillis()): Int = (workedSeconds(at) / 60).toInt()
