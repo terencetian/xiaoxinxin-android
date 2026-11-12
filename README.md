@@ -1,5 +1,7 @@
 # 分刻 · Countmin · Android 版
 
+> © 2026 逍狗屁屁 · 源代码依 [MIT License](LICENSE) 开放，应用图标、品牌标识与视觉素材保留所有权利（详见文末「版权与授权」）。
+>
 > 📦 当前 **v2.8.0**（Build 47，2026-11-12）：更名「分刻 · Countmin」，去金钱词、回归时间内核；副标题改为「记录每一段值得的时光」。包名仍是 `com.haofan.xiaoxinxin`，覆盖安装即可升级，数据与设置全部继承。
 > 功能对齐 macOS：首页三模块分页（Your Money 薪酬 / Your Days 倒计时 / Your Days 纪念日）、四套主题、19 组设置、隐私模式、事件管理。
 > 从 v1.9.x 及更早版本（包名不同）升级的**需要先卸载旧的**，桌面会短暂出现两个图标。
@@ -151,3 +153,15 @@ app/src/main/java/com/haofan/xiaoxinxin/
 ---
 
 **完全离线**：不联网、不统计、无上传，所有数据只存本机。
+
+## 版权与授权
+
+| 范围 | 授权口径 |
+|---|---|
+| 源代码与构建脚本（`*.kt` / `*.kts` / `*.gradle` / `*.sh` 等） | [MIT License](LICENSE)：可自由使用、修改、分发，须保留版权与许可声明 |
+| 应用名称「分刻」「Countmin」、App 图标与图标设计、卡通形象「刻刻」及品牌标识 | © 2026 逍狗屁屁. All rights reserved. |
+| `app/src/main/res/` 下的 mipmap / drawable 图标、`screenshots/` 截图与 APK 发行包 | © 2026 逍狗屁屁. All rights reserved. |
+
+MIT 授权**不覆盖**上表后两行的视觉资产与品牌元素；未经书面许可不得将其用于商业用途或再分发，也不得用于暗示与本项目的官方关联。完整条款见 [LICENSE](LICENSE)。
+
+第三方声明：`gradlew` / `gradlew.bat` 等 Gradle 生成文件保留其原有 Apache-2.0 许可声明；「Sony」「PlayStation」「Liquid Glass」等名称仅用于事实性配色 / 风格说明，相关商标归各自权利人所有，本项目与相关权利人无任何关联或授权关系。
