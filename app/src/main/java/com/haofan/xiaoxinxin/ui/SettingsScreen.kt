@@ -63,6 +63,8 @@ private val ALL_GROUPS = listOf(
 )
 
 private val RELEASE_HISTORY = listOf(
+    Triple("2.8.0", "2026-11-12", "更名「分刻 · Countmin」：去金钱词，回归时间内核（时钟/钱袋图标仍保留，Logo 字样改「刻」）；副标题改为「记录每一段值得的时光」。包名与数据不变，升级即继承"),
+    Triple("2.7.2", "2026-11-10", "午休时间从可计费工时中扣除（与 macOS 2.6.5/2.6.6 同口径）"),
     Triple("2.7.1", "2026-11-08", "状态栏图标对齐新版（¥｜沙漏）；新增上次异常退出诊断（原生崩溃/ANR 也能记录）；崩溃日志落盘 CrashGuard"),
 
     Triple("2.7.0", "2026-11-08", "悬浮岛 / 通知 / 灵动岛支持 MONEY·DAYS 轮播显示（设置页可配显示项与间隔）；三处配色跟随主题实时换装；统计页新增 MONEY / DAYS 双标签"),
@@ -774,7 +776,7 @@ fun SettingsScreen(onOpenDetail: (DetailMode) -> Unit = {}) {
                     SmallChip("复制报告") {
                         runCatching {
                             val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
-                            cm.setPrimaryClip(android.content.ClipData.newPlainText("小薪薪体检", r.asText()))
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("分刻体检", r.asText()))
                             probeHint = "已复制，可以直接发给我"
                         }
                     }

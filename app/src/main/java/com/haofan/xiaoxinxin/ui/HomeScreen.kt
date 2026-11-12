@@ -150,10 +150,10 @@ private fun TopBar(onToggleFloat: () -> Unit, floatOn: Boolean, hidden: Set<Stri
                     .background(Brush.linearGradient(listOf(XC.goldHi, XC.gold, XC.goldDim))),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("薪", color = XC.onGold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("刻", color = XC.onGold, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.width(9.dp))
-            Text("小薪薪", color = XC.text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
+            Text("分刻", color = XC.text, fontSize = 14.5.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.width(6.dp))
             Text("v${BuildConfig.VERSION_NAME}", color = XC.textFaint, fontSize = 10.5.sp)
             Spacer(Modifier.weight(1f))

@@ -102,7 +102,7 @@ object AutoPunch {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 Notification.Builder(ctx, CHANNEL)
                     .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentTitle("小薪薪")
+                    .setContentTitle("分刻")
                     .setContentText(text)
                     .setAutoCancel(true)
                     .build()
@@ -110,7 +110,7 @@ object AutoPunch {
                 @Suppress("DEPRECATION")
                 Notification.Builder(ctx)
                     .setSmallIcon(android.R.drawable.ic_media_play)
-                    .setContentTitle("小薪薪")
+                    .setContentTitle("分刻")
                     .setContentText(text)
                     .setAutoCancel(true)
                     .build()

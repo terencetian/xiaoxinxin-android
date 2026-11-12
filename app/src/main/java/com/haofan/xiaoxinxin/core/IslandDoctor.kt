@@ -27,7 +27,7 @@ data class IslandReport(
     val rows: List<Pair<String, String>>,
 ) {
     fun asText(): String = buildString {
-        appendLine("【小薪薪 · 系统岛体检】")
+        appendLine("【分刻 · 系统岛体检】")
         rows.forEach { (k, v) -> appendLine("$k：$v") }
         appendLine("结论：$verdict")
     }
@@ -105,7 +105,7 @@ object IslandDoctor {
             ensureChannel(ctx)
             val n = LiveUpdate.build(
                 ctx, CHANNEL,
-                "小薪薪 · 岛体检",
+                "分刻 · 岛体检",
                 "今日已到账 ¥52.77",
                 "¥52.77",
                 32, null,

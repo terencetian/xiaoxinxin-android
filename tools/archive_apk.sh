@@ -1,5 +1,5 @@
 #!/bin/bash
-# 把 Android 正式包归档到 ~/Documents/小薪薪-发布版本/v<版本>/
+# 把 Android 正式包归档到 ~/Documents/分刻-发布版本/v<版本>/（原名「小薪薪」，2.8 起改名）
 # 用法：./tools/archive_apk.sh 1.9.2 [--rebuild]
 set -euo pipefail
 
@@ -11,7 +11,14 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 GRADLE="${GRADLE:-$HOME/dev-tools/gradle-8.11.1/bin/gradle}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APK="$ROOT/app/build/outputs/apk/release/app-release.apk"
-BASE="$HOME/Documents/小薪薪-发布版本"
+BASE="$HOME/Documents/分刻-发布版本"
+LEGACY_BASE="$HOME/Documents/小薪薪-发布版本"
+
+# 2.8 改名：老的归档目录一次性挪到新名下，历史版本不散落（只改名，不动内容）
+if [ ! -d "$BASE" ] && [ -d "$LEGACY_BASE" ]; then
+  mv "$LEGACY_BASE" "$BASE"
+  echo "· 发布归档目录已迁移：小薪薪-发布版本 → 分刻-发布版本"
+fi
 
 if [ "$REBUILD" = "--rebuild" ] || [ ! -f "$APK" ]; then
   echo "· 构建 release 包…"
@@ -33,7 +40,7 @@ fi
 
 DEST="$BASE/v$VER"
 mkdir -p "$DEST"
-TARGET="$DEST/小薪薪-v$VER-android-universal.apk"
+TARGET="$DEST/countmin-v$VER-android-universal.apk"
 cp "$APK" "$TARGET"
 
 SIZE=$(du -h "$TARGET" | cut -f1 | tr -d ' ')

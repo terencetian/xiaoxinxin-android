@@ -39,7 +39,7 @@ object CrashGuard {
     private fun write(ctx: Context, e: Throwable) {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         val sb = StringBuilder()
-        sb.appendLine("小薪薪崩溃日志 $stamp")
+        sb.appendLine("分刻崩溃日志 $stamp")
         sb.appendLine("model=${Build.MANUFACTURER} ${Build.MODEL}  android=${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
         sb.appendLine("version=${com.haofan.xiaoxinxin.BuildConfig.VERSION_NAME}")
         sb.appendLine()

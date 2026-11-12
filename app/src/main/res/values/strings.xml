@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">小薪薪</string>
+    <string name="app_name">分刻</string>
     <string name="notif_channel_name">计时中</string>
     <string name="notif_channel_desc">计时运行时在通知栏显示当前到账金额</string>
-    <string name="notif_title_tracking">小薪薪 · 计费中</string>
-    <string name="notif_title_idle">小薪薪 · 未计费</string>
+    <string name="notif_title_tracking">分刻 · 计费中</string>
+    <string name="notif_title_idle">分刻 · 未计费</string>
     <string name="notif_action_stop">下班</string>
     <string name="float_desc">进账悬浮窗</string>
 </resources>

@@ -62,12 +62,12 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 .background(Brush.verticalGradient(listOf(XC.goldHi, XC.gold, XC.goldDim))),
             contentAlignment = Alignment.Center,
         ) {
-            Text("薪", color = XC.onGold, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("刻", color = XC.onGold, fontSize = 30.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(14.dp))
-        Text("小薪薪", color = XC.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+        Text("分刻", color = XC.text, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp)
         Spacer(Modifier.height(4.dp))
-        Text("让每一秒都看得见价值", color = XC.textFaint, fontSize = 12.5.sp)
+        Text("记录每一段值得的时光", color = XC.textFaint, fontSize = 12.5.sp)
         Spacer(Modifier.height(26.dp))
 
         // ── 三个模块 ──
